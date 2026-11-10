@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Speedometer: an open arc, a needle and a hub. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:strokeColor="#FFFF9F1C"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M33.8,74.2 A28.5,28.5 0 1 1 74.2,74.2" />
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M54,56 L70,38" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M54,49 a7,7 0 1 1 0,14 a7,7 0 1 1 0,-14 z" />
+</vector>

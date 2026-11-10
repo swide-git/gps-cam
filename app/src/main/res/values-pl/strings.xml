@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tab_speed">Prędkość</string>
+    <string name="tab_satellites">Satelity</string>
+    <string name="tab_camera">Kamera</string>
+    <string name="notification_channel">Śledzenie GPS</string>
+    <string name="notification_waiting">Czekam na fix GPS</string>
+    <string name="notification_sats">%1$d/%2$d sat</string>
+    <string name="notification_stop">Zatrzymaj</string>
+    <string name="permission_location_title">Potrzebny dostęp do lokalizacji</string>
+    <string name="permission_location_body">GPS Cam odczytuje prędkość i satelity bezpośrednio z odbiornika GPS. Żadne dane nie opuszczają telefonu.</string>
+    <string name="permission_grant">Udziel dostępu</string>
+    <string name="gps_disabled">Lokalizacja jest wyłączona</string>
+    <string name="open_settings">Otwórz ustawienia</string>
+    <string name="fix_none">BRAK FIXA</string>
+    <string name="fix_age">Ostatni fix %1$d s temu</string>
+    <string name="no_fix_hint">Czekam na satelity. W pociągu przyłóż telefon do szyby: metalizowane szkło i metalowe pudło wagonu tłumią większość sygnału. Pierwszy fix może potrwać minutę.</string>
+    <string name="stat_max">Maks.</string>
+    <string name="stat_avg">Średnia (w ruchu)</string>
+    <string name="stat_distance">Dystans</string>
+    <string name="stat_moving_time">Czas w ruchu</string>
+    <string name="stat_trip_time">Czas przejazdu</string>
+    <string name="stat_altitude">Wysokość</string>
+    <string name="stat_heading">Kurs</string>
+    <string name="stat_ttff">Pierwszy fix</string>
+    <string name="stat_position">Pozycja</string>
+    <string name="reset_trip">Wyzeruj przejazd</string>
+    <string name="sats_used">W fixie</string>
+    <string name="sats_visible">Widoczne</string>
+    <string name="sats_none">Jeszcze brak satelitów. Podejdź do okna albo wyjdź na zewnątrz.</string>
+    <string name="vertical_accuracy">Pionowo</string>
+    <string name="legend_used">Wypełnione: użyte w fixie. Obrys: tylko widoczne.</string>
+    <string name="camera_permission_body">Nagrywanie wymaga dostępu do kamery. Mikrofon jest opcjonalny i można go wyłączyć w ustawieniach.</string>
+    <string name="camera_saved">Zapisano %1$s w Movies/GPSCam</string>
+    <string name="camera_saved_srt">Napisy z telemetrią w Documents/GPSCam</string>
+    <string name="camera_failed">Nagrywanie nie powiodło się: %1$s</string>
+    <string name="settings">Ustawienia</string>
+    <string name="settings_unit">Jednostka prędkości</string>
+    <string name="settings_background">Śledź w tle</string>
+    <string name="settings_background_hint">Statystyki przejazdu liczą się przy wyłączonym ekranie</string>
+    <string name="settings_screen_on">Nie wygaszaj ekranu</string>
+    <string name="settings_audio">Nagrywaj dźwięk</string>
+    <string name="settings_overlay_sats">Satelity na filmie</string>
+    <string name="settings_overlay_coords">Współrzędne na filmie</string>
+    <string name="settings_overlay_coords_hint">Wyłącz przed udostępnianiem filmów nagranych w pobliżu domu</string>
+    <string name="close">Zamknij</string>
+</resources>
