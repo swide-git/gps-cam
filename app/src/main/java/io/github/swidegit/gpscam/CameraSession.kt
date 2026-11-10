@@ -67,11 +67,28 @@ sealed interface RecordingState {
  * to it in Documents/GPSCam (MediaStore does not accept non-video files under Movies/).
  */
 class CameraSession(private val context: Context) {
-    private val overlayThread = HandlerThread("overlay").apply { start() }
-    private val overlayHandler = Handler(overlayThread.looper)
+    /** Per-second subtitle sampling. The overlay effects get threads of their own (see [Overlay]). */
+    private val telemetryThread = HandlerThread("telemetry").apply { start() }
+    private val telemetryHandler = Handler(telemetryThread.looper)
     private val renderer = OverlayRenderer()
     private var provider: ProcessCameraProvider? = null
-    private var effect: OverlayEffect? = null
+    private var effect: Overlay? = null
+    /** Quality and frame rate of the current binding, to skip identical rebinds. */
+    private var boundConfig: Pair<VideoQuality, Int>? = null
+
+    /**
+     * An OverlayEffect owns an EGL context that must stay current on its handler thread. Two
+     * effects on one thread broke that: closing the first left the thread without a current
+     * context and the second crashed in SurfaceTexture.updateTexImage ("invalid current
+     * EGLDisplay"), which killed the app when the camera was bound twice. One thread per effect.
+     */
+    private class Overlay(val effect: OverlayEffect, val thread: HandlerThread) {
+        fun close() {
+            effect.close()
+            // quitSafely runs the release that close() posted before the looper stops.
+            thread.quitSafely()
+        }
+    }
     private var videoCapture: VideoCapture<Recorder>? = null
     private var recording: Recording? = null
     private val subtitles = mutableListOf<SrtEntry>()
@@ -91,6 +108,9 @@ class CameraSession(private val context: Context) {
     /** (Re)binds with the current settings. Ignored while recording: rebinding would end the video. */
     fun bind(owner: LifecycleOwner, previewView: PreviewView) {
         if (recording != null) return
+        val wanted = AppSettings.state.value.let { it.videoQuality to it.frameRate }
+        // Same view, same configuration, camera already running: nothing to do.
+        if (boundCamera != null && this.previewView === previewView && boundConfig == wanted) return
         this.previewView = previewView
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
@@ -125,7 +145,7 @@ class CameraSession(private val context: Context) {
             val stabilization = capabilities?.isStabilizationSupported ?: false
             // Not every camera can do 60 fps or stabilisation at every quality: try the wish, then fall back.
             val attempts = listOf(wantedFps to stabilization, wantedFps to false, 30 to stabilization, 30 to false).distinct()
-            var bound: Triple<Camera, VideoCapture<Recorder>, OverlayEffect>? = null
+            var bound: Triple<Camera, VideoCapture<Recorder>, Overlay>? = null
             var lastError: Exception? = null
             var fpsUsed = 30
             for ((fps, stab) in attempts) {
@@ -146,7 +166,7 @@ class CameraSession(private val context: Context) {
                         .setVideoStabilizationEnabled(stab)
                         .setTargetFrameRate(Range(fps, fps))
                         .build()
-                    val group = UseCaseGroup.Builder().addUseCase(preview).addUseCase(capture).addEffect(overlay).build()
+                    val group = UseCaseGroup.Builder().addUseCase(preview).addUseCase(capture).addEffect(overlay.effect).build()
                     p.unbindAll()
                     bound = Triple(p.bindToLifecycle(owner, selector, group), capture, overlay)
                     fpsUsed = fps
@@ -164,6 +184,7 @@ class CameraSession(private val context: Context) {
             val (cam, capture, overlay) = bound
             effect?.close()
             effect = overlay
+            boundConfig = settings.videoQuality to settings.frameRate
             videoCapture = capture
             boundCamera?.cameraInfo?.zoomState?.removeObservers(owner)
             boundCamera = cam
@@ -183,8 +204,9 @@ class CameraSession(private val context: Context) {
         }
     }
 
-    private fun newOverlay(): OverlayEffect {
-        val overlay = OverlayEffect(CameraEffect.PREVIEW or CameraEffect.VIDEO_CAPTURE, 0, overlayHandler) {
+    private fun newOverlay(): Overlay {
+        val thread = HandlerThread("overlay").apply { start() }
+        val overlay = OverlayEffect(CameraEffect.PREVIEW or CameraEffect.VIDEO_CAPTURE, 0, Handler(thread.looper)) {
             Log.e(TAG, "overlay effect failed", it)
         }
         overlay.setOnDrawListener { frame ->
@@ -199,7 +221,7 @@ class CameraSession(private val context: Context) {
             }
             true
         }
-        return overlay
+        return Overlay(overlay, thread)
     }
 
     fun setZoom(ratio: Float) {
@@ -273,10 +295,10 @@ class CameraSession(private val context: Context) {
                 is VideoRecordEvent.Start -> {
                     recordingStartMs = SystemClock.elapsedRealtime()
                     _state.value = RecordingState.Recording(recordingStartMs)
-                    overlayHandler.post(sampler)
+                    telemetryHandler.post(sampler)
                 }
                 is VideoRecordEvent.Finalize -> {
-                    overlayHandler.removeCallbacks(sampler)
+                    telemetryHandler.removeCallbacks(sampler)
                     recording = null
                     val error = event.error
                     // ERROR_SOURCE_INACTIVE and similar still leave a playable file; only a missing output is fatal.
@@ -304,7 +326,8 @@ class CameraSession(private val context: Context) {
         effect = null
         boundCamera = null
         previewView = null
-        overlayThread.quitSafely()
+        boundConfig = null
+        telemetryThread.quitSafely()
     }
 
     /** One subtitle per second with the same values the overlay shows. */
@@ -324,7 +347,7 @@ class CameraSession(private val context: Context) {
                 val start = (offset / 1000) * 1000
                 subtitles += SrtEntry(start, start + 1000, text)
             }
-            overlayHandler.postDelayed(this, 1000 - offset % 1000)
+            telemetryHandler.postDelayed(this, 1000 - offset % 1000)
         }
     }
 
