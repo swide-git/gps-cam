@@ -48,6 +48,8 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true }
+    // English only, whatever the phone language (also drops library translations from the APK).
+    androidResources { localeFilters += listOf("en") }
 }
 
 dependencies {
