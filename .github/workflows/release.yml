@@ -118,12 +118,15 @@ jobs:
       - name: Unit tests
         run: ./gradlew --no-daemon :app:testDebugUnitTest
 
-      - name: Build APK
+      - name: Build APK and App Bundle
         run: |
           mkdir -p dist
           if [ -n "${GPS_CAM_KEYSTORE_PATH:-}" ]; then
-            ./gradlew --no-daemon :app:assembleRelease
+            # The signed .aab is what Google Play takes; the .apk is for sideloading.
+            ./gradlew --no-daemon :app:assembleRelease :app:bundleRelease
             cp app/build/outputs/apk/release/app-release.apk dist/gps-cam.apk
+            cp app/build/outputs/bundle/release/app-release.aab dist/gps-cam.aab
+            (cd dist && sha256sum gps-cam.aab > gps-cam.aab.sha256)
           else
             ./gradlew --no-daemon :app:assembleDebug
             cp app/build/outputs/apk/debug/app-debug.apk dist/gps-cam.apk

@@ -1,4 +1,11 @@
-# GPS Cam
+<div align="center">
+  <h1>GPS Cam</h1>
+  <p><strong>Real speed straight from the GPS receiver, the satellites behind it, and video with the speed burned in.</strong></p>
+  <p>Speedometer, satellite view and speed-overlay camera for Android 10+, built for fast trains.</p>
+  <p><a href="https://github.com/swide-git/gps-cam/releases/latest"><strong>⬇ Download the latest release (APK)</strong></a> · <a href="https://github.com/swide-git/gps-cam/releases">All releases</a> · <a href="https://swide.pl/gps-cam/">Privacy policy</a></p>
+</div>
+
+---
 
 Android app that shows your real speed straight from the GPS receiver, the satellites it uses and
 their signal strength, and records video with the speed burned into the picture.
@@ -25,6 +32,9 @@ speed stays accurate at any speed the receiver can track.
 
 Nothing leaves the phone: no internet permission, no accounts, no analytics.
 
+The version in the top bar opens the latest release on GitHub in the browser. The app has no
+automatic update check, because it has no internet permission.
+
 ## Requirements
 
 Android 10 (API 29) or newer with a GPS receiver. Dual-frequency phones (L1 + L5) give noticeably
@@ -47,7 +57,8 @@ Needs JDK 17 and the Android SDK (platform 37). The script picks the Homebrew pa
 
 ## Releases
 
-Every merge to `main` publishes a signed APK on GitHub Releases (`.github/workflows/release.yml`):
+Every merge to `main` publishes a signed APK (sideloading) and App Bundle (`gps-cam.aab`, for
+Google Play) on GitHub Releases (`.github/workflows/release.yml`):
 the patch version is bumped automatically, `#minor` / `#major` in the merge message bump those,
 `[skip release]` builds and tests only. Publishing requires four repository secrets:
 `GPS_CAM_KEYSTORE_BASE64`, `GPS_CAM_KEYSTORE_PASSWORD`, `GPS_CAM_KEY_ALIAS`, `GPS_CAM_KEY_PASSWORD`.

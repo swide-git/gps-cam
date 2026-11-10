@@ -3,6 +3,7 @@ package io.github.swidegit.gpscam
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings as SystemSettings
@@ -40,11 +41,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -93,6 +96,8 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private const val RELEASES_URL = "https://github.com/swide-git/gps-cam/releases/latest"
+
 private enum class Tab(val label: Int, val icon: ImageVector) {
     SPEED(R.string.tab_speed, AppIcons.Speed),
     SATELLITES(R.string.tab_satellites, AppIcons.GpsFixed),
@@ -109,6 +114,10 @@ private fun App(hasLocation: Boolean, requestLocation: () -> Unit) {
 
     val view = LocalView.current
     SideEffect { view.keepScreenOn = settings.keepScreenOn }
+    val context = LocalContext.current
+    val appVersion = remember(context) {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
+    }
 
     Scaffold(
         topBar = {
@@ -116,6 +125,10 @@ private fun App(hasLocation: Boolean, requestLocation: () -> Unit) {
                 TopAppBar(
                     title = { Text(stringResource(tab.label)) },
                     actions = {
+                        // No update check: the app has no internet permission. The browser shows what is new.
+                        TextButton(onClick = {
+                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(RELEASES_URL))) }
+                        }) { Text("v$appVersion") }
                         IconButton(onClick = { showSettings = true }) {
                             Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings))
                         }
@@ -165,7 +178,7 @@ private fun LocationPermissionScreen(modifier: Modifier, requestLocation: () -> 
 
 @Composable
 fun GpsDisabledNotice(modifier: Modifier = Modifier) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(stringResource(R.string.gps_disabled), color = Palette.bad, style = MaterialTheme.typography.titleMedium)
         TextButton(onClick = {
