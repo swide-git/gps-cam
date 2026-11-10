@@ -69,6 +69,10 @@ the patch version is bumped automatically, `#minor` / `#major` in the merge mess
 `[skip release]` builds and tests only. Publishing requires four repository secrets:
 `GPS_CAM_KEYSTORE_BASE64`, `GPS_CAM_KEYSTORE_PASSWORD`, `GPS_CAM_KEY_ALIAS`, `GPS_CAM_KEY_PASSWORD`.
 
+## Google Play
+
+Listing texts, policy form answers and graphics: [docs/play-store.md](docs/play-store.md).
+
 ## Layout
 
 ```

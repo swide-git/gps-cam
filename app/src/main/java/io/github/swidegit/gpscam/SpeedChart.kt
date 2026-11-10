@@ -54,9 +54,10 @@ fun SpeedChart(track: List<TrackPoint>, unit: SpeedUnit, modifier: Modifier = Mo
     var range by rememberSaveable { mutableStateOf(ChartRange.TEN_MIN) }
     val measurer = rememberTextMeasurer()
     val gridColor = Palette.muted.copy(alpha = 0.35f)
+    val lineColor = Palette.accent
     val labelStyle = TextStyle(color = Palette.muted, fontSize = 11.sp)
     Column(
-        modifier.background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(12.dp)).padding(12.dp),
+        modifier.background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(24.dp)).padding(16.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(stringResource(R.string.chart_title), style = MaterialTheme.typography.labelLarge, color = Palette.muted, modifier = Modifier.weight(1f).padding(top = 8.dp))
@@ -98,7 +99,7 @@ fun SpeedChart(track: List<TrackPoint>, unit: SpeedUnit, modifier: Modifier = Mo
                 if (previous == null || pt.utcMs - previous.utcMs > 10_000) path.moveTo(x, y) else path.lineTo(x, y)
                 previous = pt
             }
-            drawPath(path, Palette.accent, style = Stroke(2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawPath(path, lineColor, style = Stroke(2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
         }
     }
 }

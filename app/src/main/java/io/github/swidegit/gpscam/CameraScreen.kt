@@ -107,7 +107,7 @@ fun CameraScreen(modifier: Modifier, onOpenSettings: () -> Unit) {
         )
         Column(Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(12.dp)) {
             Text(camera.description, color = Color.White, style = MaterialTheme.typography.labelMedium, modifier = Modifier.chip())
-            camera.note?.let { Text(it, color = Palette.warn, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 4.dp).chip()) }
+            camera.note?.let { Text(it, color = Palette.overlayWarn, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 4.dp).chip()) }
         }
         IconButton(onClick = onOpenSettings, modifier = Modifier.align(Alignment.TopEnd).safeDrawingPadding()) {
             Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings), tint = Color.White)
@@ -119,7 +119,7 @@ fun CameraScreen(modifier: Modifier, onOpenSettings: () -> Unit) {
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(top = 8.dp)
-                    .background(Palette.bad, RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 4.dp),
+                    .background(Palette.record, RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 4.dp),
             )
         }
         Column(Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -152,7 +152,7 @@ fun CameraScreen(modifier: Modifier, onOpenSettings: () -> Unit) {
             val recording = current is RecordingState.Recording
             Box(
                 Modifier.size(76.dp).border(4.dp, Color.White, CircleShape).padding(8.dp)
-                    .background(Palette.bad, if (recording) RoundedCornerShape(8.dp) else CircleShape)
+                    .background(Palette.record, if (recording) RoundedCornerShape(8.dp) else CircleShape)
                     .clickable { if (recording) session.stopRecording() else session.startRecording() },
             )
         }
@@ -169,7 +169,7 @@ private fun Modifier.chip() = background(Color(0x99000000), RoundedCornerShape(6
 private fun LensChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         Modifier.size(44.dp)
-            .background(if (selected) Palette.accent else Color(0x99000000), CircleShape)
+            .background(if (selected) Palette.overlayAccent else Color(0x99000000), CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

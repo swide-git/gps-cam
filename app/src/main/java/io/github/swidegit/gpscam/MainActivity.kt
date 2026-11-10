@@ -8,6 +8,12 @@ import android.os.Bundle
 import android.provider.Settings as SystemSettings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.ui.text.font.FontWeight
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -117,14 +123,31 @@ private fun App(hasLocation: Boolean, requestLocation: () -> Unit) {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
     }
 
+    if (showSettings) {
+        BackHandler { showSettings = false }
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(stringResource(R.string.settings), fontWeight = FontWeight.SemiBold) },
+                    navigationIcon = {
+                        IconButton(onClick = { showSettings = false }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.close))
+                        }
+                    },
+                )
+            },
+        ) { padding -> SettingsScreen(settings, Modifier.padding(padding).fillMaxSize()) }
+        return
+    }
+
     Scaffold(
         topBar = {
             if (tab != Tab.CAMERA) {
                 TopAppBar(
-                    title = { Text(stringResource(tab.label)) },
+                    title = { Text("GPS Cam", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold) },
                     actions = {
-                        // No update check: the app has no internet permission. The browser shows what is new.
-                        TextButton(onClick = {
+                        // As in Second Display, but no update check: the app has no internet permission.
+                        FilledTonalButton(onClick = {
                             runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(RELEASES_URL))) }
                         }) { Text("v$appVersion") }
                         IconButton(onClick = { showSettings = true }) {
@@ -156,8 +179,6 @@ private fun App(hasLocation: Boolean, requestLocation: () -> Unit) {
             tab == Tab.TRIPS -> TripsScreen(gps, settings, modifier)
         }
     }
-
-    if (showSettings) SettingsDialog(settings) { showSettings = false }
 }
 
 @Composable
@@ -186,53 +207,65 @@ fun GpsDisabledNotice(modifier: Modifier = Modifier) {
     }
 }
 
+/** Settings page in the Second Display style: one rounded card per section. */
 @Composable
-private fun SettingsDialog(settings: Settings, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
-        title = { Text(stringResource(R.string.settings)) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text(stringResource(R.string.settings_unit), style = MaterialTheme.typography.labelLarge)
-                ChoiceRow(SpeedUnit.entries, settings.unit, { it.label }) { u -> AppSettings.update { it.copy(unit = u) } }
-
-                SectionTitle(R.string.settings_video)
-                ChoiceRow(VideoQuality.entries, settings.videoQuality, { it.label }) { q -> AppSettings.update { it.copy(videoQuality = q) } }
-                ChoiceRow(listOf(30, 60), settings.frameRate, { "$it fps" }) { f -> AppSettings.update { it.copy(frameRate = f) } }
-                SettingSwitch(R.string.settings_landscape_focus, R.string.settings_landscape_focus_hint, settings.landscapeFocus) { v ->
-                    AppSettings.update { it.copy(landscapeFocus = v) }
-                }
-                SettingSwitch(R.string.settings_audio, null, settings.recordAudio) { v ->
-                    AppSettings.update { it.copy(recordAudio = v) }
-                }
-
-                SectionTitle(R.string.settings_overlay)
-                Text(stringResource(R.string.settings_overlay_position), style = MaterialTheme.typography.labelMedium, color = Palette.muted)
-                ChoiceRow(OverlayCorner.entries, settings.overlayCorner, { it.label }) { c -> AppSettings.update { it.copy(overlayCorner = c) } }
-                Text(stringResource(R.string.settings_overlay_size), style = MaterialTheme.typography.labelMedium, color = Palette.muted)
-                ChoiceRow(OverlaySize.entries, settings.overlaySize, { it.label }) { z -> AppSettings.update { it.copy(overlaySize = z) } }
-                Text(stringResource(R.string.settings_overlay_opacity), style = MaterialTheme.typography.labelMedium, color = Palette.muted)
-                ChoiceRow(listOf(0, 30, 60, 85), settings.overlayOpacity, { "$it%" }) { o -> AppSettings.update { it.copy(overlayOpacity = o) } }
-                SettingSwitch(R.string.settings_overlay_sats, null, settings.overlaySatellites) { v ->
-                    AppSettings.update { it.copy(overlaySatellites = v) }
-                }
-                SettingSwitch(R.string.settings_overlay_coords, R.string.settings_overlay_coords_hint, settings.overlayCoordinates) { v ->
-                    AppSettings.update { it.copy(overlayCoordinates = v) }
-                }
-
-                SectionTitle(R.string.settings_general)
-                SettingSwitch(R.string.settings_screen_on, null, settings.keepScreenOn) { v ->
-                    AppSettings.update { it.copy(keepScreenOn = v) }
-                }
+private fun SettingsScreen(settings: Settings, modifier: Modifier) {
+    Column(
+        modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        SettingsCard(R.string.settings_unit) {
+            ChoiceRow(SpeedUnit.entries, settings.unit, { it.label }) { u -> AppSettings.update { it.copy(unit = u) } }
+        }
+        SettingsCard(R.string.settings_video) {
+            ChoiceRow(VideoQuality.entries, settings.videoQuality, { it.label }) { q -> AppSettings.update { it.copy(videoQuality = q) } }
+            ChoiceRow(listOf(30, 60), settings.frameRate, { "$it fps" }) { f -> AppSettings.update { it.copy(frameRate = f) } }
+            SettingSwitch(R.string.settings_landscape_focus, R.string.settings_landscape_focus_hint, settings.landscapeFocus) { v ->
+                AppSettings.update { it.copy(landscapeFocus = v) }
             }
-        },
-    )
+            SettingSwitch(R.string.settings_audio, null, settings.recordAudio) { v -> AppSettings.update { it.copy(recordAudio = v) } }
+        }
+        SettingsCard(R.string.settings_overlay) {
+            SubLabel(R.string.settings_overlay_position)
+            ChoiceRow(OverlayCorner.entries, settings.overlayCorner, { it.label }) { c -> AppSettings.update { it.copy(overlayCorner = c) } }
+            SubLabel(R.string.settings_overlay_size)
+            ChoiceRow(OverlaySize.entries, settings.overlaySize, { it.label }) { z -> AppSettings.update { it.copy(overlaySize = z) } }
+            SubLabel(R.string.settings_overlay_opacity)
+            ChoiceRow(listOf(0, 30, 60, 85), settings.overlayOpacity, { "$it%" }) { o -> AppSettings.update { it.copy(overlayOpacity = o) } }
+            SettingSwitch(R.string.settings_overlay_sats, null, settings.overlaySatellites) { v ->
+                AppSettings.update { it.copy(overlaySatellites = v) }
+            }
+            SettingSwitch(R.string.settings_overlay_coords, R.string.settings_overlay_coords_hint, settings.overlayCoordinates) { v ->
+                AppSettings.update { it.copy(overlayCoordinates = v) }
+            }
+        }
+        SettingsCard(R.string.settings_general) {
+            SettingSwitch(R.string.settings_screen_on, null, settings.keepScreenOn) { v -> AppSettings.update { it.copy(keepScreenOn = v) } }
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun SettingsCard(title: Int, content: @Composable () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(28.dp))
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+    ) {
+        SectionTitle(title)
+        content()
+    }
+}
+
+@Composable
+private fun SubLabel(text: Int) {
+    Text(stringResource(text), style = MaterialTheme.typography.labelLarge, color = Palette.muted, modifier = Modifier.padding(top = 8.dp))
 }
 
 @Composable
 private fun SectionTitle(title: Int) {
-    Text(stringResource(title), style = MaterialTheme.typography.titleSmall, color = Palette.accent, modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
+    Text(stringResource(title), style = MaterialTheme.typography.titleMedium, color = Palette.accent, modifier = Modifier.padding(bottom = 4.dp))
 }
 
 @OptIn(ExperimentalLayoutApi::class)

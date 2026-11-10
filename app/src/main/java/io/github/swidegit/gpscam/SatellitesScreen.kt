@@ -42,9 +42,9 @@ import kotlin.math.sin
 private const val CN0_MAX = 50f
 
 private fun signalColor(cn0: Float): Color = when {
-    cn0 >= 35f -> Palette.good
-    cn0 >= 25f -> Palette.warn
-    else -> Palette.bad
+    cn0 >= 35f -> Palette.badgeGood
+    cn0 >= 25f -> Palette.badgeWarn
+    else -> Palette.badgeBad
 }
 
 @Composable
@@ -143,7 +143,7 @@ private fun polar(c: Offset, radius: Float, azimuthDeg: Float): Offset {
 @Composable
 private fun SatelliteRow(s: Satellite) {
     Row(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 6.dp),
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(6.dp).height(28.dp).background(Color(s.constellation.argb), RoundedCornerShape(3.dp)))
