@@ -31,6 +31,7 @@ object Palette {
     val record = Color(0xFFE53935)
     val overlayAccent = Color(0xFFFF9F43)
     val overlayWarn = Color(0xFFFFCA28)
+    val overlayMuted = Color(0xFFA1A1AA)
 
     val muted: Color @Composable get() = MaterialTheme.colorScheme.onSurfaceVariant
     val accent: Color @Composable get() = MaterialTheme.colorScheme.primary

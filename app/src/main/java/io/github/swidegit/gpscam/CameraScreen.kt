@@ -14,6 +14,8 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.input.pointer.pointerInput
@@ -82,79 +84,80 @@ fun CameraScreen(modifier: Modifier, onOpenSettings: () -> Unit) {
     }
     LaunchedEffect(settings.landscapeFocus) { session.applyFocus(settings.landscapeFocus) }
 
-    Box(modifier.background(Color.Black)) {
-        AndroidView(
-            factory = { ctx ->
-                PreviewView(ctx).apply {
-                    scaleType = PreviewView.ScaleType.FIT_CENTER
-                    previewView = this
-                }
-            },
-            modifier = Modifier.fillMaxSize(),
-        )
-        // Gestures on top of the preview: pinch to zoom, tap to focus (leaves landscape focus).
-        Box(
-            Modifier.fillMaxSize()
-                .pointerInput(Unit) {
-                    detectTransformGestures { _, _, zoom, _ -> session.setZoom(session.camera.value.zoom * zoom) }
-                }
-                .pointerInput(Unit) {
-                    detectTapGestures { offset ->
-                        if (AppSettings.state.value.landscapeFocus) AppSettings.update { it.copy(landscapeFocus = false) }
-                        session.focusAt(offset.x, offset.y)
+    // The preview shows exactly the recorded frame, so nothing is drawn on top of it: the overlay
+    // can sit in any corner without being hidden by buttons. All controls live in the panel below.
+    Column(modifier.background(Color.Black)) {
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            AndroidView(
+                factory = { ctx ->
+                    PreviewView(ctx).apply {
+                        scaleType = PreviewView.ScaleType.FIT_CENTER
+                        previewView = this
                     }
                 },
-        )
-        Column(Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(12.dp)) {
-            Text(camera.description, color = Color.White, style = MaterialTheme.typography.labelMedium, modifier = Modifier.chip())
-            camera.note?.let { Text(it, color = Palette.overlayWarn, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 4.dp).chip()) }
-        }
-        IconButton(onClick = onOpenSettings, modifier = Modifier.align(Alignment.TopEnd).safeDrawingPadding()) {
-            Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings), tint = Color.White)
-        }
-        val current = state
-        if (current is RecordingState.Recording) {
-            Text(
-                "● " + Format.duration(now - current.startedAtMs),
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(top = 8.dp)
-                    .background(Palette.record, RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 4.dp),
+                modifier = Modifier.fillMaxSize(),
+            )
+            // Gestures on the preview: pinch to zoom, tap to focus (leaves landscape focus).
+            Box(
+                Modifier.fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTransformGestures { _, _, zoom, _ -> session.setZoom(session.camera.value.zoom * zoom) }
+                    }
+                    .pointerInput(Unit) {
+                        detectTapGestures { offset ->
+                            if (AppSettings.state.value.landscapeFocus) AppSettings.update { it.copy(landscapeFocus = false) }
+                            session.focusAt(offset.x, offset.y)
+                        }
+                    },
             )
         }
-        Column(Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            val message = when (current) {
+
+        val current = state
+        val recording = current is RecordingState.Recording
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            // Status line: recording time, or the last result, or what the camera is set to.
+            val (status, statusColor) = when (current) {
+                is RecordingState.Recording -> "● " + Format.duration(now - current.startedAtMs) to Palette.record
                 is RecordingState.Saved -> stringResource(R.string.camera_saved, current.name) +
-                    if (current.subtitles) "\n" + stringResource(R.string.camera_saved_srt) else ""
-                is RecordingState.Failed -> stringResource(R.string.camera_failed, current.message)
-                else -> null
+                    (if (current.subtitles) "\n" + stringResource(R.string.camera_saved_srt) else "") to Color.White
+                is RecordingState.Failed -> stringResource(R.string.camera_failed, current.message) to Palette.overlayWarn
+                RecordingState.Idle -> listOfNotNull(camera.description, camera.note).filter { it.isNotEmpty() }.joinToString(" · ") to Palette.overlayMuted
             }
-            if (message != null) {
-                Text(
-                    message,
-                    color = Color.White,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(8.dp).background(Color(0x99000000), RoundedCornerShape(8.dp)).padding(8.dp),
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                status,
+                color = statusColor,
+                fontWeight = if (recording) FontWeight.Bold else FontWeight.Normal,
+                style = MaterialTheme.typography.labelLarge,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(bottom = 10.dp),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 zoomPresets(camera.minZoom, camera.maxZoom).forEach { z ->
                     LensChip(
                         label = if (z < 1f) "${"%.1f".format(Locale.US, z)}×" else "${z.toInt()}×",
                         selected = kotlin.math.abs(camera.zoom - z) < 0.05f,
                     ) { session.setZoom(z) }
                 }
+                Spacer(Modifier.width(4.dp))
+                Box(
+                    Modifier.size(64.dp).border(3.dp, Color.White, CircleShape).padding(6.dp)
+                        .background(Palette.record, if (recording) RoundedCornerShape(8.dp) else CircleShape)
+                        .clickable { if (recording) session.stopRecording() else session.startRecording() },
+                )
+                Spacer(Modifier.width(4.dp))
                 LensChip(label = "∞", selected = settings.landscapeFocus) {
                     AppSettings.update { it.copy(landscapeFocus = !it.landscapeFocus) }
                 }
+                Box(
+                    Modifier.size(40.dp).background(Color(0xFF2A2A2A), CircleShape).clickable(onClick = onOpenSettings),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings), tint = Color.White, modifier = Modifier.size(22.dp))
+                }
             }
-            Spacer(Modifier.height(12.dp))
-            val recording = current is RecordingState.Recording
-            Box(
-                Modifier.size(76.dp).border(4.dp, Color.White, CircleShape).padding(8.dp)
-                    .background(Palette.record, if (recording) RoundedCornerShape(8.dp) else CircleShape)
-                    .clickable { if (recording) session.stopRecording() else session.startRecording() },
-            )
         }
     }
 }
@@ -168,8 +171,8 @@ private fun Modifier.chip() = background(Color(0x99000000), RoundedCornerShape(6
 @Composable
 private fun LensChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.size(44.dp)
-            .background(if (selected) Palette.overlayAccent else Color(0x99000000), CircleShape)
+        Modifier.size(40.dp)
+            .background(if (selected) Palette.overlayAccent else Color(0xFF2A2A2A), CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
