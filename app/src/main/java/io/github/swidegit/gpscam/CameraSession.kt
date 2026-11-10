@@ -76,6 +76,8 @@ class CameraSession(private val context: Context) {
     private var recording: Recording? = null
     private val subtitles = mutableListOf<SrtEntry>()
     private var recordingStartMs = 0L
+    @Volatile private var overlayErrorLogged = false
+    private var focusOverridden = false
 
     private val _state = MutableStateFlow<RecordingState>(RecordingState.Idle)
     val state: StateFlow<RecordingState> = _state
@@ -92,7 +94,18 @@ class CameraSession(private val context: Context) {
         this.previewView = previewView
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
-            val p = future.get()
+            // Any failure here must show up on screen, not take the app down.
+            try {
+                bindNow(future.get(), owner, previewView)
+            } catch (e: Throwable) {
+                Log.e(TAG, "camera setup failed", e)
+                _state.value = RecordingState.Failed(describe(e))
+            }
+        }, context.mainExecutor)
+    }
+
+    private fun bindNow(p: ProcessCameraProvider, owner: LifecycleOwner, previewView: PreviewView) {
+        run {
             provider = p
             val selector = CameraSelector.DEFAULT_BACK_CAMERA
             val settings = AppSettings.state.value
@@ -145,8 +158,8 @@ class CameraSession(private val context: Context) {
                 }
             }
             if (bound == null) {
-                _state.value = RecordingState.Failed(lastError?.message ?: "camera unavailable")
-                return@addListener
+                _state.value = RecordingState.Failed(lastError?.let { describe(it) } ?: "camera unavailable")
+                return
             }
             val (cam, capture, overlay) = bound
             effect?.close()
@@ -154,6 +167,8 @@ class CameraSession(private val context: Context) {
             videoCapture = capture
             boundCamera?.cameraInfo?.zoomState?.removeObservers(owner)
             boundCamera = cam
+            // A new camera session starts with default autofocus.
+            focusOverridden = false
             if (settings.frameRate >= 60 && fpsUsed < 60) notes += "60 fps not available"
             val resolution = capture.resolutionInfo?.resolution
             val description = listOfNotNull(
@@ -165,7 +180,7 @@ class CameraSession(private val context: Context) {
                 _camera.value = _camera.value.copy(minZoom = z.minZoomRatio, maxZoom = z.maxZoomRatio, zoom = z.zoomRatio)
             }
             applyFocus(settings.landscapeFocus)
-        }, context.mainExecutor)
+        }
     }
 
     private fun newOverlay(): OverlayEffect {
@@ -173,9 +188,15 @@ class CameraSession(private val context: Context) {
             Log.e(TAG, "overlay effect failed", it)
         }
         overlay.setOnDrawListener { frame ->
-            val canvas = frame.overlayCanvas
-            canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
-            renderer.draw(canvas, frame.size.width, frame.size.height, frame.rotationDegrees, GpsTracker.state.value, AppSettings.state.value)
+            // Runs on the overlay thread for every frame: an exception here would kill the app.
+            try {
+                val canvas = frame.overlayCanvas
+                canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
+                renderer.draw(canvas, frame.size.width, frame.size.height, frame.rotationDegrees, GpsTracker.state.value, AppSettings.state.value)
+            } catch (e: Throwable) {
+                if (!overlayErrorLogged) Log.e(TAG, "overlay drawing failed", e)
+                overlayErrorLogged = true
+            }
             true
         }
         return overlay
@@ -183,13 +204,26 @@ class CameraSession(private val context: Context) {
 
     fun setZoom(ratio: Float) {
         val c = _camera.value
-        boundCamera?.cameraControl?.setZoomRatio(ratio.coerceIn(c.minZoom, c.maxZoom))
+        guarded("zoom") { boundCamera?.cameraControl?.setZoomRatio(ratio.coerceIn(c.minZoom, c.maxZoom)) }
     }
+
+    /** Camera controls are optional extras: a failure is reported as a note, never a crash. */
+    private inline fun guarded(what: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (e: Throwable) {
+            Log.e(TAG, "$what failed", e)
+            _camera.value = _camera.value.copy(note = "$what unavailable: ${describe(e)}")
+        }
+    }
+
+    private fun describe(e: Throwable): String = e.javaClass.simpleName + (e.message?.let { ": $it" } ?: "")
 
     /** Fixed focus at infinity (landscape through a window), or back to continuous autofocus. */
     @OptIn(ExperimentalCamera2Interop::class)
-    fun applyFocus(landscape: Boolean) {
-        val cam = boundCamera ?: return
+    fun applyFocus(landscape: Boolean) = guarded("focus") {
+        val cam = boundCamera ?: return@guarded
+        if (!landscape && !focusOverridden) return@guarded
         val control = Camera2CameraControl.from(cam.cameraControl)
         if (landscape) {
             control.setCaptureRequestOptions(
@@ -198,15 +232,18 @@ class CameraSession(private val context: Context) {
                     .setCaptureRequestOption(CaptureRequest.LENS_FOCUS_DISTANCE, 0f)
                     .build()
             )
-        } else {
+            focusOverridden = true
+        } else if (focusOverridden) {
+            // Default autofocus needs no Camera2 call at all; only undo what landscape focus set.
             control.clearCaptureRequestOptions()
+            focusOverridden = false
         }
     }
 
     /** Tap to focus: autofocus and metering on the tapped point of the preview. */
-    fun focusAt(x: Float, y: Float) {
-        val cam = boundCamera ?: return
-        val view = previewView ?: return
+    fun focusAt(x: Float, y: Float) = guarded("tap to focus") {
+        val cam = boundCamera ?: return@guarded
+        val view = previewView ?: return@guarded
         val point = view.meteringPointFactory.createPoint(x, y)
         cam.cameraControl.startFocusAndMetering(FocusMeteringAction.Builder(point).build())
     }
