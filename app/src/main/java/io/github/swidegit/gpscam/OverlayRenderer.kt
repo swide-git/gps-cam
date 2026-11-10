@@ -41,17 +41,21 @@ class OverlayRenderer {
             270 -> { canvas.translate(width.toFloat(), 0f); canvas.rotate(90f); height to width }
             else -> width to height
         }
-        drawUpright(canvas, w.toFloat(), h.toFloat(), gps, settings)
+        // The camera stream is often 4:3 while the video is cropped to 16:9 after this effect,
+        // which cut the box off at the frame edges. Draw only inside the centred 16:9 area.
+        val visible = visibleArea(w.toFloat(), h.toFloat(), VIDEO_ASPECT)
+        canvas.translate(visible.left, visible.top)
+        drawUpright(canvas, visible.width, visible.height, gps, settings)
         canvas.restore()
     }
 
-    private fun drawUpright(canvas: Canvas, w: Float, h: Float, gps: GpsState, settings: Settings) {
+    private fun drawUpright(canvas: Canvas, w: Float, h: Float, gps: GpsState, settings: Settings, scale: Float = 1f) {
         val unit = settings.unit
         val short = min(w, h)
         val margin = short * 0.035f
-        big.textSize = short * 0.13f
-        unitPaint.textSize = short * 0.05f
-        small.textSize = short * 0.032f
+        big.textSize = short * 0.13f * scale
+        unitPaint.textSize = short * 0.05f * scale
+        small.textSize = short * 0.032f * scale
 
         val now = SystemClock.elapsedRealtime()
         val fix = gps.fix
@@ -74,6 +78,10 @@ class OverlayRenderer {
         val speedWidth = big.measureText(speedText) + margin * 0.4f + unitPaint.measureText(unit.label)
         val lineHeight = small.textSize * 1.3f
         val boxWidth = max(speedWidth, lines.maxOf { small.measureText(it) }) + margin * 2
+        if (scale == 1f && boxWidth > w - margin * 2) {
+            // Narrow portrait frames: shrink the text until the box fits between the margins.
+            return drawUpright(canvas, w, h, gps, settings, (w - margin * 4) / (boxWidth - margin * 2))
+        }
         val bigAscent = -big.ascent()
         val boxHeight = bigAscent + big.descent() * 0.4f + lines.size * lineHeight + margin * 1.4f
         val left = margin
@@ -89,4 +97,23 @@ class OverlayRenderer {
             canvas.drawText(line, left + margin, y - small.descent(), small)
         }
     }
+
+    companion object {
+        /** Long side over short side of the recorded video (Quality.FHD and its fallbacks are 16:9). */
+        const val VIDEO_ASPECT = 16f / 9f
+    }
+}
+
+data class Area(val left: Float, val top: Float, val width: Float, val height: Float)
+
+/** The centred part of a [w]x[h] frame that a crop to [aspect] (long side / short side) keeps. */
+fun visibleArea(w: Float, h: Float, aspect: Float): Area {
+    val portrait = h > w
+    val long = if (portrait) h else w
+    val short = if (portrait) w else h
+    val keptLong = min(long, short * aspect)
+    val keptShort = min(short, long / aspect)
+    val vw = if (portrait) keptShort else keptLong
+    val vh = if (portrait) keptLong else keptShort
+    return Area((w - vw) / 2f, (h - vh) / 2f, vw, vh)
 }

@@ -17,3 +17,18 @@ class SrtTest {
         )
     }
 }
+
+class VisibleAreaTest {
+    @Test fun portraitFourThreeCroppedToSixteenNine() {
+        // 1440x1920 upright buffer (4:3) -> the 16:9 video keeps 1080x1920 in the middle.
+        assertEquals(Area(180f, 0f, 1080f, 1920f), visibleArea(1440f, 1920f, 16f / 9f))
+    }
+
+    @Test fun landscapeFourThree() {
+        assertEquals(Area(0f, 180f, 1920f, 1080f), visibleArea(1920f, 1440f, 16f / 9f))
+    }
+
+    @Test fun alreadySixteenNine() {
+        assertEquals(Area(0f, 0f, 1080f, 1920f), visibleArea(1080f, 1920f, 16f / 9f))
+    }
+}

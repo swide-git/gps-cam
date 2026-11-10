@@ -15,6 +15,8 @@ import androidx.camera.core.CameraEffect
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
 import androidx.camera.core.UseCaseGroup
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
+import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.effects.OverlayEffect
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.FallbackStrategy
@@ -65,7 +67,13 @@ class CameraSession(private val context: Context) {
             val p = future.get()
             provider = p
             val selector = CameraSelector.DEFAULT_BACK_CAMERA
-            val preview = Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }
+            // 16:9 like the video, so the preview shows the same framing as the recording.
+            val preview = Preview.Builder()
+                .setResolutionSelector(
+                    ResolutionSelector.Builder().setAspectRatioStrategy(AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY).build()
+                )
+                .build()
+                .also { it.surfaceProvider = previewView.surfaceProvider }
             val recorder = Recorder.Builder()
                 .setQualitySelector(QualitySelector.from(Quality.FHD, FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)))
                 .build()
