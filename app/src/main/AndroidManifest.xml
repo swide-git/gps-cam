@@ -4,10 +4,6 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-    <!-- Android 13+: without it the tracking notification is hidden (tracking still works). -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-feature android:name="android.hardware.location.gps" android:required="true" />
     <!-- The speed and satellite screens work without a camera. -->
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
@@ -22,7 +18,5 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <service android:name=".GpsService" android:exported="false"
-            android:foregroundServiceType="location" />
     </application>
 </manifest>

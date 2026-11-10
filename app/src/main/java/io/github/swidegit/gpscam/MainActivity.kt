@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings as SystemSettings
 import androidx.activity.ComponentActivity
@@ -59,7 +58,7 @@ class MainActivity : ComponentActivity() {
 
     private val permissionRequest = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         refreshPermission()
-        if (hasLocation) GpsService.start(this)
+        if (hasLocation) GpsTracker.start(this)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -74,12 +73,13 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         refreshPermission()
-        if (hasLocation) GpsService.start(this)
+        if (hasLocation) GpsTracker.start(this)
     }
 
+    // GPS runs only while the app is on screen: no background work, no notification.
     override fun onStop() {
         super.onStop()
-        if (!AppSettings.state.value.backgroundTracking && !isChangingConfigurations) GpsService.stop(this)
+        GpsTracker.stop()
     }
 
     private fun refreshPermission() {
@@ -87,12 +87,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestLocation() {
-        val permissions = buildList {
-            add(Manifest.permission.ACCESS_FINE_LOCATION)
-            add(Manifest.permission.ACCESS_COARSE_LOCATION)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-        permissionRequest.launch(permissions.toTypedArray())
+        permissionRequest.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
     }
 }
 
@@ -206,9 +201,6 @@ private fun SettingsDialog(settings: Settings, onDismiss: () -> Unit) {
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                SettingSwitch(R.string.settings_background, R.string.settings_background_hint, settings.backgroundTracking) { v ->
-                    AppSettings.update { it.copy(backgroundTracking = v) }
-                }
                 SettingSwitch(R.string.settings_screen_on, null, settings.keepScreenOn) { v ->
                     AppSettings.update { it.copy(keepScreenOn = v) }
                 }

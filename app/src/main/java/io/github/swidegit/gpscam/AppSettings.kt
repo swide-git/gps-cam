@@ -7,8 +7,6 @@ import kotlinx.coroutines.flow.StateFlow
 
 data class Settings(
     val unit: SpeedUnit = SpeedUnit.KMH,
-    /** Keep tracking (and the trip statistics) when the app is in the background or the screen is off. */
-    val backgroundTracking: Boolean = true,
     val keepScreenOn: Boolean = true,
     val recordAudio: Boolean = true,
     val overlayCoordinates: Boolean = true,
@@ -28,7 +26,6 @@ object AppSettings {
         val d = Settings()
         _state.value = Settings(
             unit = SpeedUnit.entries.firstOrNull { it.name == p.getString("unit", null) } ?: d.unit,
-            backgroundTracking = p.getBoolean("backgroundTracking", d.backgroundTracking),
             keepScreenOn = p.getBoolean("keepScreenOn", d.keepScreenOn),
             recordAudio = p.getBoolean("recordAudio", d.recordAudio),
             overlayCoordinates = p.getBoolean("overlayCoordinates", d.overlayCoordinates),
@@ -41,7 +38,6 @@ object AppSettings {
         _state.value = s
         prefs?.edit()
             ?.putString("unit", s.unit.name)
-            ?.putBoolean("backgroundTracking", s.backgroundTracking)
             ?.putBoolean("keepScreenOn", s.keepScreenOn)
             ?.putBoolean("recordAudio", s.recordAudio)
             ?.putBoolean("overlayCoordinates", s.overlayCoordinates)

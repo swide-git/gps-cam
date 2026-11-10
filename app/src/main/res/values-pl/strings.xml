@@ -36,8 +36,6 @@
     <string name="camera_failed">Nagrywanie nie powiodło się: %1$s</string>
     <string name="settings">Ustawienia</string>
     <string name="settings_unit">Jednostka prędkości</string>
-    <string name="settings_background">Śledź w tle</string>
-    <string name="settings_background_hint">Statystyki przejazdu liczą się przy wyłączonym ekranie</string>
     <string name="settings_screen_on">Nie wygaszaj ekranu</string>
     <string name="settings_audio">Nagrywaj dźwięk</string>
     <string name="settings_overlay_sats">Satelity na filmie</string>

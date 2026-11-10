@@ -21,7 +21,7 @@ speed stays accurate at any speed the receiver can track.
   position accuracy, last-fix age (tunnels), altitude, heading.
 - **Trip statistics**: maximum and average moving speed, distance, moving time, trip time. Only
   accurate fixes count, so jitter at a station or a single bad fix in a tunnel does not inflate
-  them. Tracking continues with the screen off (foreground service, can be turned off in settings).
+  them. GPS runs only while the app is on screen: no background work, no notification.
 - **Satellites**: sky plot, per-satellite C/N0 signal bars, constellation (GPS, GLONASS, Galileo,
   BeiDou, QZSS, NavIC, SBAS), band (L1/E1/B1, L5/E5a/B2a, ...), used-in-fix, time to first fix,
   PDOP/HDOP/VDOP from NMEA.
@@ -68,7 +68,6 @@ the patch version is bumped automatically, `#minor` / `#major` in the merge mess
 ```
 app/src/main/java/io/github/swidegit/gpscam/
     GpsTracker.kt        raw GPS: location, GnssStatus, NMEA (GSA) -> StateFlow<GpsState>
-    GpsService.kt        foreground service (type location) owning the tracker
     TripStats.kt         distance, max, average, moving time (pure, unit-tested)
     Gnss.kt              constellations, bands, NMEA GSA parser
     Format.kt            units and number formatting
