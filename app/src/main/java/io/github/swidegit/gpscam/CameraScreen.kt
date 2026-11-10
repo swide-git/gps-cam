@@ -9,6 +9,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.input.pointer.pointerInput
+import java.util.Locale
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -62,18 +71,44 @@ fun CameraScreen(modifier: Modifier, onOpenSettings: () -> Unit) {
     val session = remember { CameraSession(context.applicationContext) }
     DisposableEffect(session) { onDispose { session.release() } }
     val state by session.state.collectAsStateWithLifecycle()
+    val camera by session.camera.collectAsStateWithLifecycle()
+    val settings by AppSettings.state.collectAsStateWithLifecycle()
     val now = rememberNow()
+    var previewView by remember { mutableStateOf<PreviewView?>(null) }
+
+    // Quality and frame rate need a new camera session; focus mode applies to the running one.
+    LaunchedEffect(previewView, settings.videoQuality, settings.frameRate) {
+        previewView?.let { session.bind(owner, it) }
+    }
+    LaunchedEffect(settings.landscapeFocus) { session.applyFocus(settings.landscapeFocus) }
 
     Box(modifier.background(Color.Black)) {
         AndroidView(
             factory = { ctx ->
                 PreviewView(ctx).apply {
                     scaleType = PreviewView.ScaleType.FIT_CENTER
-                    session.bind(owner, this)
+                    previewView = this
                 }
             },
             modifier = Modifier.fillMaxSize(),
         )
+        // Gestures on top of the preview: pinch to zoom, tap to focus (leaves landscape focus).
+        Box(
+            Modifier.fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, _, zoom, _ -> session.setZoom(session.camera.value.zoom * zoom) }
+                }
+                .pointerInput(Unit) {
+                    detectTapGestures { offset ->
+                        if (AppSettings.state.value.landscapeFocus) AppSettings.update { it.copy(landscapeFocus = false) }
+                        session.focusAt(offset.x, offset.y)
+                    }
+                },
+        )
+        Column(Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(12.dp)) {
+            Text(camera.description, color = Color.White, style = MaterialTheme.typography.labelMedium, modifier = Modifier.chip())
+            camera.note?.let { Text(it, color = Palette.warn, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 4.dp).chip()) }
+        }
         IconButton(onClick = onOpenSettings, modifier = Modifier.align(Alignment.TopEnd).safeDrawingPadding()) {
             Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings), tint = Color.White)
         }
@@ -102,6 +137,18 @@ fun CameraScreen(modifier: Modifier, onOpenSettings: () -> Unit) {
                     modifier = Modifier.padding(8.dp).background(Color(0x99000000), RoundedCornerShape(8.dp)).padding(8.dp),
                 )
             }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                zoomPresets(camera.minZoom, camera.maxZoom).forEach { z ->
+                    LensChip(
+                        label = if (z < 1f) "${"%.1f".format(Locale.US, z)}×" else "${z.toInt()}×",
+                        selected = kotlin.math.abs(camera.zoom - z) < 0.05f,
+                    ) { session.setZoom(z) }
+                }
+                LensChip(label = "∞", selected = settings.landscapeFocus) {
+                    AppSettings.update { it.copy(landscapeFocus = !it.landscapeFocus) }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
             val recording = current is RecordingState.Recording
             Box(
                 Modifier.size(76.dp).border(4.dp, Color.White, CircleShape).padding(8.dp)
@@ -109,5 +156,23 @@ fun CameraScreen(modifier: Modifier, onOpenSettings: () -> Unit) {
                     .clickable { if (recording) session.stopRecording() else session.startRecording() },
             )
         }
+    }
+}
+
+/** 0.5× (or the widest the camera has) when an ultra-wide lens exists, then 1×, 2×, 5× within range. */
+private fun zoomPresets(min: Float, max: Float): List<Float> =
+    (listOfNotNull(if (min < 0.95f) maxOf(min, 0.5f) else null) + listOf(1f, 2f, 5f).filter { it <= max + 0.01f }).distinct()
+
+private fun Modifier.chip() = background(Color(0x99000000), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp)
+
+@Composable
+private fun LensChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier.size(44.dp)
+            .background(if (selected) Palette.accent else Color(0x99000000), CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, color = if (selected) Color.Black else Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
     }
 }

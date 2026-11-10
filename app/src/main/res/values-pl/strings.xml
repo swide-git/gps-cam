@@ -24,7 +24,6 @@
     <string name="stat_heading">Kurs</string>
     <string name="stat_ttff">Pierwszy fix</string>
     <string name="stat_position">Pozycja</string>
-    <string name="reset_trip">Wyzeruj przejazd</string>
     <string name="sats_used">W fixie</string>
     <string name="sats_visible">Widoczne</string>
     <string name="sats_none">Jeszcze brak satelitów. Podejdź do okna albo wyjdź na zewnątrz.</string>

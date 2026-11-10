@@ -5,18 +5,37 @@ import android.content.SharedPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
+/** Recording resolution; all are 16:9, which the overlay layout relies on. */
+enum class VideoQuality(val label: String) { HD("720p"), FHD("1080p"), UHD("4K") }
+
+enum class OverlayCorner(val label: String) { BOTTOM_LEFT("↙"), BOTTOM_RIGHT("↘"), TOP_LEFT("↖"), TOP_RIGHT("↗") }
+
+enum class OverlaySize(val label: String, val scale: Float) { SMALL("S", 0.75f), MEDIUM("M", 1f), LARGE("L", 1.3f) }
+
 data class Settings(
     val unit: SpeedUnit = SpeedUnit.KMH,
     val keepScreenOn: Boolean = true,
     val recordAudio: Boolean = true,
     val overlayCoordinates: Boolean = true,
     val overlaySatellites: Boolean = true,
+    val overlayCorner: OverlayCorner = OverlayCorner.BOTTOM_LEFT,
+    val overlaySize: OverlaySize = OverlaySize.MEDIUM,
+    /** Opacity of the box behind the overlay text, 0-100. */
+    val overlayOpacity: Int = 60,
+    val videoQuality: VideoQuality = VideoQuality.FHD,
+    /** 30 or 60; falls back to 30 when the camera cannot do 60 at the chosen quality. */
+    val frameRate: Int = 30,
+    /** Focus fixed at infinity: autofocus on a train window locks onto dirt and reflections. */
+    val landscapeFocus: Boolean = false,
 )
 
 object AppSettings {
     private var prefs: SharedPreferences? = null
     private val _state = MutableStateFlow(Settings())
     val state: StateFlow<Settings> = _state
+
+    private inline fun <reified E : Enum<E>> SharedPreferences.enum(key: String, default: E): E =
+        enumValues<E>().firstOrNull { it.name == getString(key, null) } ?: default
 
     @Synchronized
     fun init(context: Context) {
@@ -25,11 +44,17 @@ object AppSettings {
         prefs = p
         val d = Settings()
         _state.value = Settings(
-            unit = SpeedUnit.entries.firstOrNull { it.name == p.getString("unit", null) } ?: d.unit,
+            unit = p.enum("unit", d.unit),
             keepScreenOn = p.getBoolean("keepScreenOn", d.keepScreenOn),
             recordAudio = p.getBoolean("recordAudio", d.recordAudio),
             overlayCoordinates = p.getBoolean("overlayCoordinates", d.overlayCoordinates),
             overlaySatellites = p.getBoolean("overlaySatellites", d.overlaySatellites),
+            overlayCorner = p.enum("overlayCorner", d.overlayCorner),
+            overlaySize = p.enum("overlaySize", d.overlaySize),
+            overlayOpacity = p.getInt("overlayOpacity", d.overlayOpacity),
+            videoQuality = p.enum("videoQuality", d.videoQuality),
+            frameRate = p.getInt("frameRate", d.frameRate),
+            landscapeFocus = p.getBoolean("landscapeFocus", d.landscapeFocus),
         )
     }
 
@@ -42,6 +67,12 @@ object AppSettings {
             ?.putBoolean("recordAudio", s.recordAudio)
             ?.putBoolean("overlayCoordinates", s.overlayCoordinates)
             ?.putBoolean("overlaySatellites", s.overlaySatellites)
+            ?.putString("overlayCorner", s.overlayCorner.name)
+            ?.putString("overlaySize", s.overlaySize.name)
+            ?.putInt("overlayOpacity", s.overlayOpacity)
+            ?.putString("videoQuality", s.videoQuality.name)
+            ?.putInt("frameRate", s.frameRate)
+            ?.putBoolean("landscapeFocus", s.landscapeFocus)
             ?.apply()
     }
 }

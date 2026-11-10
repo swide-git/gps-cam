@@ -53,9 +53,11 @@ class OverlayRenderer {
         val unit = settings.unit
         val short = min(w, h)
         val margin = short * 0.035f
-        big.textSize = short * 0.13f * scale
-        unitPaint.textSize = short * 0.05f * scale
-        small.textSize = short * 0.032f * scale
+        val size = scale * settings.overlaySize.scale
+        big.textSize = short * 0.13f * size
+        unitPaint.textSize = short * 0.05f * size
+        small.textSize = short * 0.032f * size
+        box.alpha = settings.overlayOpacity.coerceIn(0, 100) * 255 / 100
 
         val now = SystemClock.elapsedRealtime()
         val fix = gps.fix
@@ -84,8 +86,14 @@ class OverlayRenderer {
         }
         val bigAscent = -big.ascent()
         val boxHeight = bigAscent + big.descent() * 0.4f + lines.size * lineHeight + margin * 1.4f
-        val left = margin
-        val top = h - margin - boxHeight
+        val left = when (settings.overlayCorner) {
+            OverlayCorner.BOTTOM_LEFT, OverlayCorner.TOP_LEFT -> margin
+            else -> w - margin - boxWidth
+        }
+        val top = when (settings.overlayCorner) {
+            OverlayCorner.TOP_LEFT, OverlayCorner.TOP_RIGHT -> margin
+            else -> h - margin - boxHeight
+        }
         canvas.drawRoundRect(RectF(left, top, left + boxWidth, top + boxHeight), margin * 0.5f, margin * 0.5f, box)
 
         var y = top + margin * 0.7f + bigAscent

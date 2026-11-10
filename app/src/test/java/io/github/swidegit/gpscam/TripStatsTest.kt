@@ -51,3 +51,27 @@ class TripStatsTest {
         assertEquals(0L, t.current.movingTimeMs)
     }
 }
+
+class SpikeFilterTest {
+    @Test fun impossibleAccelerationIsNotMaximum() {
+        val t = TripStats()
+        t.add(Fix(0, 35.0, 139.0, 80.0, 5.0))
+        t.add(Fix(1000, 35.0, 139.0, 140.0, 5.0)) // +60 m/s in 1 s: a glitch
+        t.add(Fix(2000, 35.0, 139.0, 81.0, 5.0))
+        assertEquals(81.0, t.current.maxSpeedMs, 0.0)
+    }
+
+    @Test fun uncertainSpeedIsNotMaximum() {
+        val t = TripStats()
+        t.add(Fix(0, 35.0, 139.0, 80.0, 5.0, speedAccuracyMs = 0.5))
+        t.add(Fix(1000, 35.0, 139.0, 85.0, 5.0, speedAccuracyMs = 9.0))
+        assertEquals(80.0, t.current.maxSpeedMs, 0.0)
+    }
+
+    @Test fun realAccelerationCounts() {
+        val t = TripStats()
+        // A supercar: 0 to 100 km/h in about 3 s.
+        listOf(0.0, 9.0, 18.0, 27.8).forEachIndexed { i, v -> t.add(Fix(i * 1000L, 35.0, 139.0, v, 5.0, 0.3)) }
+        assertEquals(27.8, t.current.maxSpeedMs, 0.0)
+    }
+}

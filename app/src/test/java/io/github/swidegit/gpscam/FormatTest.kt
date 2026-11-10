@@ -37,3 +37,13 @@ class FormatTest {
         assertEquals(SpeedUnit.KMH, SpeedUnit.KNOTS.next())
     }
 }
+
+class ChartAxisTest {
+    @Test fun niceMaximum() {
+        org.junit.Assert.assertEquals(10.0, niceAxisMax(3.0), 0.0)
+        org.junit.Assert.assertEquals(20.0, niceAxisMax(14.0), 0.0)
+        org.junit.Assert.assertEquals(50.0, niceAxisMax(31.0), 0.0)
+        org.junit.Assert.assertEquals(100.0, niceAxisMax(51.0), 0.0)
+        org.junit.Assert.assertEquals(350.0, niceAxisMax(320.0), 0.0)
+    }
+}

@@ -14,6 +14,8 @@ data class Fix(
     /** Doppler speed from the receiver, null when the chip did not report one. */
     val speedMs: Double?,
     val accuracyM: Double?,
+    /** 1-sigma uncertainty of [speedMs] reported by the chip, when known. */
+    val speedAccuracyMs: Double? = null,
 )
 
 data class TripSnapshot(
@@ -35,19 +37,31 @@ fun haversineMetres(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Dou
 
 /**
  * Trip statistics. Jitter while standing still must not add distance, and single bad fixes
- * (tunnels, station roofs) must not set the maximum speed, so both need a decent fix.
+ * (tunnels, station roofs) must not set the maximum speed: the maximum needs a good position,
+ * a confident speed and an acceleration that a vehicle can actually reach.
  */
 class TripStats {
     private var first: Fix? = null
     private var last: Fix? = null
     private var snapshot = TripSnapshot()
+    private var lastSpeed: Double? = null
 
     val current: TripSnapshot get() = snapshot
 
     fun reset() {
         first = null
         last = null
+        lastSpeed = null
         snapshot = TripSnapshot()
+    }
+
+    private fun plausible(fix: Fix, speed: Double, prev: Fix?): Boolean {
+        if ((fix.speedAccuracyMs ?: 0.0) > MAX_SPEED_ACCURACY_MS) return false
+        val prevSpeed = lastSpeed ?: return true
+        val dt = (fix.elapsedMs - (prev ?: return true).elapsedMs) / 1000.0
+        // After a gap (tunnel) the previous speed says nothing about this one.
+        if (dt <= 0.0 || dt > MAX_ACCEL_WINDOW_S) return true
+        return (speed - prevSpeed) / dt <= MAX_ACCELERATION_MS2
     }
 
     /** Speed of [fix]: the receiver's Doppler speed, or derived from the previous fix when missing. */
@@ -71,8 +85,9 @@ class TripStats {
                 if (dtMs <= MAX_GAP_S * 1000) s = s.copy(movingTimeMs = s.movingTimeMs + dtMs)
             }
         }
-        if (accurate && speed != null && speed > s.maxSpeedMs) s = s.copy(maxSpeedMs = speed)
+        if (speed != null && speed > s.maxSpeedMs && accurate && plausible(fix, speed, prev)) s = s.copy(maxSpeedMs = speed)
         last = fix
+        lastSpeed = speed
         snapshot = s
         return s
     }
@@ -81,5 +96,10 @@ class TripStats {
         const val MAX_ACCURACY_M = 30.0
         const val MOVING_MS = 0.7
         const val MAX_GAP_S = 10.0
+        /** Speeds less certain than this (1 sigma) do not count for the maximum. */
+        const val MAX_SPEED_ACCURACY_MS = 3.0
+        /** About 1.1 g: beyond the fastest road cars, far beyond any train. */
+        const val MAX_ACCELERATION_MS2 = 11.0
+        const val MAX_ACCEL_WINDOW_S = 5.0
     }
 }

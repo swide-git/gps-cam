@@ -19,15 +19,21 @@ speed stays accurate at any speed the receiver can track.
 
 - **Speed**: km/h, mph, m/s or knots (tap the unit to switch), speed accuracy, fix type (2D/3D),
   position accuracy, last-fix age (tunnels), altitude, heading.
-- **Trip statistics**: maximum and average moving speed, distance, moving time, trip time. Only
-  accurate fixes count, so jitter at a station or a single bad fix in a tunnel does not inflate
-  them. GPS runs only while the app is on screen: no background work, no notification.
+- **Trip statistics and chart**: maximum and average moving speed, distance, moving time, trip
+  time, and a speed-over-time chart (10 min, 1 h, whole trip). Jitter at a station does not add
+  distance, and the maximum ignores glitches: it needs a good position, a confident Doppler speed
+  and an acceleration a vehicle can reach (at most about 1.1 g).
+- **Trips**: "End trip" saves the trip (track and summary) in the app. Any trip can be exported
+  as GPX or CSV to `Documents/GPSCam` and shared, e.g. to view the route in Google Earth or Strava. GPS runs only while the app is on screen: no background work, no notification.
 - **Satellites**: sky plot, per-satellite C/N0 signal bars, constellation (GPS, GLONASS, Galileo,
   BeiDou, QZSS, NavIC, SBAS), band (L1/E1/B1, L5/E5a/B2a, ...), used-in-fix, time to first fix,
   PDOP/HDOP/VDOP from NMEA.
-- **Camera**: back camera, Full HD, stabilisation where supported. The telemetry box (speed, max,
-  satellites, accuracy, time, optionally coordinates) is drawn into each frame with a CameraX
-  `OverlayEffect`, so the preview shows exactly what the video contains. Videos go to
+- **Camera**: back camera, 720p / 1080p / 4K at 30 or 60 fps (falling back when the phone cannot),
+  stabilisation where supported, zoom presets (0.5x on phones with an ultra-wide lens, 1x, 2x, 5x)
+  and pinch to zoom, tap to focus, and "landscape focus" fixed at infinity so autofocus does not
+  lock onto a train window. The telemetry box (speed, max, satellites, accuracy, time, optionally
+  coordinates) is drawn into each frame with a CameraX `OverlayEffect`, so the preview shows
+  exactly what the video contains; its corner, size and background opacity are configurable. Videos go to
   `Movies/GPSCam`; a per-second telemetry subtitle file (`.srt`) goes to `Documents/GPSCam`.
 
 Nothing leaves the phone: no internet permission, no accounts, no analytics.
@@ -68,7 +74,10 @@ the patch version is bumped automatically, `#minor` / `#major` in the merge mess
 ```
 app/src/main/java/io/github/swidegit/gpscam/
     GpsTracker.kt        raw GPS: location, GnssStatus, NMEA (GSA) -> StateFlow<GpsState>
-    TripStats.kt         distance, max, average, moving time (pure, unit-tested)
+    TripStats.kt         distance, max (spike filter), average, moving time (pure, unit-tested)
+    Track.kt             track points, GPX / CSV / storage formats (pure, unit-tested)
+    TripStore.kt         trip history in private storage, exports to Documents/GPSCam
+    SpeedChart.kt, TripsScreen.kt
     Gnss.kt              constellations, bands, NMEA GSA parser
     Format.kt            units and number formatting
     CameraSession.kt     CameraX preview + VideoCapture + OverlayEffect, .srt writer

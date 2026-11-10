@@ -130,16 +130,19 @@ fun SpeedScreen(gps: GpsState, settings: Settings, modifier: Modifier) {
             StatCard(stringResource(R.string.stat_ttff), gps.ttffMs?.let { String.format(Locale.US, "%.1f s", it / 1000.0) } ?: "--")
         }
         Spacer(Modifier.height(12.dp))
+        SpeedChart(gps.track, unit, Modifier.fillMaxWidth().widthIn(max = 640.dp))
+        Spacer(Modifier.height(12.dp))
         if (fix != null) {
             Text(stringResource(R.string.stat_position), style = MaterialTheme.typography.labelMedium, color = Palette.muted)
             Text(Format.coordinates(fix.lat, fix.lon), fontWeight = FontWeight.Medium)
         }
         Spacer(Modifier.height(16.dp))
-        OutlinedButton(onClick = { GpsTracker.resetTrip() }) {
+        OutlinedButton(onClick = { GpsTracker.endTrip() }) {
             Icon(Icons.Filled.Refresh, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.reset_trip))
+            Text(stringResource(R.string.end_trip))
         }
+        Text(stringResource(R.string.end_trip_hint), style = MaterialTheme.typography.bodySmall, color = Palette.muted, textAlign = TextAlign.Center)
     }
 }
 

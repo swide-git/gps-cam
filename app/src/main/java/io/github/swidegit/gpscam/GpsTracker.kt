@@ -42,6 +42,8 @@ data class GpsState(
     val dop: Dop? = null,
     val ttffMs: Int? = null,
     val trip: TripSnapshot = TripSnapshot(),
+    /** Points of the current trip (for the speed chart); the same points go to [TripStore]. */
+    val track: List<TrackPoint> = emptyList(),
     val error: String? = null,
 ) {
     val usedInFix: Int get() = satellites.count { it.usedInFix }
@@ -62,10 +64,13 @@ data class GpsState(
  */
 object GpsTracker {
     private const val TAG = "GpsTracker"
+    private const val TRACK_MAX_ACCURACY_M = 50.0
     private val _state = MutableStateFlow(GpsState())
     val state: StateFlow<GpsState> = _state
 
     private val trip = TripStats()
+    private var tripId: Long? = null
+    private val track = ArrayList<TrackPoint>()
     private var thread: HandlerThread? = null
     private var manager: LocationManager? = null
 
@@ -110,6 +115,7 @@ object GpsTracker {
     @Synchronized
     fun start(context: Context) {
         if (thread != null) return
+        TripStore.init(context)
         val lm = context.applicationContext.getSystemService(LocationManager::class.java)
         val t = HandlerThread("gps").apply { start() }
         val handler = Handler(t.looper)
@@ -149,26 +155,49 @@ object GpsTracker {
         _state.update { it.copy(running = false, satellites = emptyList(), fixType = FixType.NONE) }
     }
 
-    fun resetTrip() {
-        synchronized(trip) { trip.reset() }
-        _state.update { it.copy(trip = TripSnapshot()) }
+    /** Saves the current trip to the history and starts a new one. */
+    fun endTrip() {
+        synchronized(trip) {
+            tripId?.let { TripStore.endTrip(it, track.toList(), trip.current) }
+            trip.reset()
+            track.clear()
+            tripId = null
+        }
+        _state.update { it.copy(trip = TripSnapshot(), track = emptyList()) }
     }
+
+    /** Id of the trip in progress (its start time), or null before the first good fix. */
+    fun currentTripId(): Long? = synchronized(trip) { tripId }
 
     private fun onLocation(loc: Location) {
         val elapsedMs = loc.elapsedRealtimeNanos / 1_000_000
         val accuracy = if (loc.hasAccuracy()) loc.accuracy.toDouble() else null
-        val fix = Fix(elapsedMs, loc.latitude, loc.longitude, if (loc.hasSpeed()) loc.speed.toDouble() else null, accuracy)
-        val (speed, snapshot) = synchronized(trip) { trip.speedOf(fix) to trip.add(fix) }
+        val speedAccuracy = if (loc.hasSpeedAccuracy()) loc.speedAccuracyMetersPerSecond.toDouble() else null
+        val fix = Fix(elapsedMs, loc.latitude, loc.longitude, if (loc.hasSpeed()) loc.speed.toDouble() else null, accuracy, speedAccuracy)
         val altitude = when {
             Build.VERSION.SDK_INT >= 34 && loc.hasMslAltitude() -> loc.mslAltitudeMeters
             loc.hasAltitude() -> loc.altitude
             else -> null
         }
+        val (speed, snapshot, points) = synchronized(trip) {
+            val speed = trip.speedOf(fix)
+            val snapshot = trip.add(fix)
+            val last = track.lastOrNull()
+            // One point per second at most, and only usable positions.
+            val record = (accuracy ?: Double.MAX_VALUE) <= TRACK_MAX_ACCURACY_M && (last == null || elapsedMs - last.elapsedMs >= 1000)
+            if (record) {
+                val id = tripId ?: loc.time.also { tripId = it }
+                val point = TrackPoint(loc.time, elapsedMs, loc.latitude, loc.longitude, altitude, speed, accuracy)
+                track += point
+                TripStore.append(id, point)
+            }
+            Triple(speed, snapshot, if (record) track.toList() else null)
+        }
         val gpsFix = GpsFix(
             lat = loc.latitude,
             lon = loc.longitude,
             speedMs = speed,
-            speedAccuracyMs = if (loc.hasSpeedAccuracy()) loc.speedAccuracyMetersPerSecond.toDouble() else null,
+            speedAccuracyMs = speedAccuracy,
             bearingDeg = if (loc.hasBearing()) loc.bearing else null,
             altitudeM = altitude,
             accuracyM = accuracy,
@@ -176,6 +205,6 @@ object GpsTracker {
             elapsedMs = elapsedMs,
             utcMs = loc.time,
         )
-        _state.update { it.copy(fix = gpsFix, trip = snapshot, providerEnabled = true) }
+        _state.update { it.copy(fix = gpsFix, trip = snapshot, track = points ?: it.track, providerEnabled = true) }
     }
 }

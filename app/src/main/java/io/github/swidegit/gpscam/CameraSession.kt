@@ -11,7 +11,16 @@ import android.os.HandlerThread
 import android.os.SystemClock
 import android.provider.MediaStore
 import android.util.Log
+import android.hardware.camera2.CaptureRequest
+import android.util.Range
+import androidx.annotation.OptIn
+import androidx.camera.camera2.interop.Camera2CameraControl
+import androidx.camera.camera2.interop.CaptureRequestOptions
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraEffect
+import androidx.camera.core.DynamicRange
+import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
 import androidx.camera.core.UseCaseGroup
@@ -34,6 +43,16 @@ import kotlinx.coroutines.flow.StateFlow
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+data class CameraStatus(
+    val minZoom: Float = 1f,
+    val maxZoom: Float = 1f,
+    val zoom: Float = 1f,
+    /** What was actually bound, e.g. "1920×1080 · 60 fps". */
+    val description: String = "",
+    /** Wishes the camera could not meet, e.g. "60 fps not available". */
+    val note: String? = null,
+)
 
 sealed interface RecordingState {
     data object Idle : RecordingState
@@ -61,48 +80,135 @@ class CameraSession(private val context: Context) {
     private val _state = MutableStateFlow<RecordingState>(RecordingState.Idle)
     val state: StateFlow<RecordingState> = _state
 
+    private val _camera = MutableStateFlow(CameraStatus())
+    /** Zoom range and the configuration that was actually bound, for the camera screen. */
+    val camera: StateFlow<CameraStatus> = _camera
+    private var boundCamera: Camera? = null
+    private var previewView: PreviewView? = null
+
+    /** (Re)binds with the current settings. Ignored while recording: rebinding would end the video. */
     fun bind(owner: LifecycleOwner, previewView: PreviewView) {
+        if (recording != null) return
+        this.previewView = previewView
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
             val p = future.get()
             provider = p
             val selector = CameraSelector.DEFAULT_BACK_CAMERA
-            // 16:9 like the video, so the preview shows the same framing as the recording.
-            val preview = Preview.Builder()
-                .setResolutionSelector(
-                    ResolutionSelector.Builder().setAspectRatioStrategy(AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY).build()
-                )
-                .build()
-                .also { it.surfaceProvider = previewView.surfaceProvider }
-            val recorder = Recorder.Builder()
-                .setQualitySelector(QualitySelector.from(Quality.FHD, FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)))
-                .build()
-            val stabilization = runCatching {
-                Recorder.getVideoCapabilities(p.getCameraInfo(selector)).isStabilizationSupported
-            }.getOrDefault(false)
-            val capture = VideoCapture.Builder(recorder).setVideoStabilizationEnabled(stabilization).build()
-            val overlay = OverlayEffect(CameraEffect.PREVIEW or CameraEffect.VIDEO_CAPTURE, 0, overlayHandler) {
-                Log.e(TAG, "overlay effect failed", it)
+            val settings = AppSettings.state.value
+            val info = runCatching { p.getCameraInfo(selector) }.getOrNull()
+            val capabilities = info?.let { runCatching { Recorder.getVideoCapabilities(it) }.getOrNull() }
+            val quality = when (settings.videoQuality) {
+                VideoQuality.HD -> Quality.HD
+                VideoQuality.FHD -> Quality.FHD
+                VideoQuality.UHD -> Quality.UHD
             }
-            overlay.setOnDrawListener { frame ->
-                val canvas = frame.overlayCanvas
-                canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
-                renderer.draw(canvas, frame.size.width, frame.size.height, frame.rotationDegrees, GpsTracker.state.value, AppSettings.state.value)
-                true
+            val notes = mutableListOf<String>()
+            if (capabilities != null && quality !in capabilities.getSupportedQualities(DynamicRange.SDR)) {
+                notes += "${settings.videoQuality.label} not supported"
             }
-            val group = UseCaseGroup.Builder().addUseCase(preview).addUseCase(capture).addEffect(overlay).build()
-            try {
-                p.unbindAll()
-                p.bindToLifecycle(owner, selector, group)
-                effect?.close()
-                effect = overlay
-                videoCapture = capture
-            } catch (e: Exception) {
-                Log.e(TAG, "bind failed", e)
-                overlay.close()
-                _state.value = RecordingState.Failed(e.message ?: e.javaClass.simpleName)
+            val sixtyPossible = info?.supportedFrameRateRanges?.any { it.upper >= 60 } ?: false
+            val wantedFps = if (settings.frameRate >= 60 && sixtyPossible) 60 else 30
+            val stabilization = capabilities?.isStabilizationSupported ?: false
+            // Not every camera can do 60 fps or stabilisation at every quality: try the wish, then fall back.
+            val attempts = listOf(wantedFps to stabilization, wantedFps to false, 30 to stabilization, 30 to false).distinct()
+            var bound: Triple<Camera, VideoCapture<Recorder>, OverlayEffect>? = null
+            var lastError: Exception? = null
+            var fpsUsed = 30
+            for ((fps, stab) in attempts) {
+                val overlay = newOverlay()
+                try {
+                    val preview = Preview.Builder()
+                        // 16:9 like the video, so the preview shows the same framing as the recording.
+                        .setResolutionSelector(
+                            ResolutionSelector.Builder().setAspectRatioStrategy(AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY).build()
+                        )
+                        .setTargetFrameRate(Range(fps, fps))
+                        .build()
+                        .also { it.surfaceProvider = previewView.surfaceProvider }
+                    val recorder = Recorder.Builder()
+                        .setQualitySelector(QualitySelector.from(quality, FallbackStrategy.lowerQualityOrHigherThan(quality)))
+                        .build()
+                    val capture = VideoCapture.Builder(recorder)
+                        .setVideoStabilizationEnabled(stab)
+                        .setTargetFrameRate(Range(fps, fps))
+                        .build()
+                    val group = UseCaseGroup.Builder().addUseCase(preview).addUseCase(capture).addEffect(overlay).build()
+                    p.unbindAll()
+                    bound = Triple(p.bindToLifecycle(owner, selector, group), capture, overlay)
+                    fpsUsed = fps
+                    break
+                } catch (e: Exception) {
+                    Log.w(TAG, "bind failed at $fps fps, stabilisation $stab", e)
+                    overlay.close()
+                    lastError = e
+                }
             }
+            if (bound == null) {
+                _state.value = RecordingState.Failed(lastError?.message ?: "camera unavailable")
+                return@addListener
+            }
+            val (cam, capture, overlay) = bound
+            effect?.close()
+            effect = overlay
+            videoCapture = capture
+            boundCamera?.cameraInfo?.zoomState?.removeObservers(owner)
+            boundCamera = cam
+            if (settings.frameRate >= 60 && fpsUsed < 60) notes += "60 fps not available"
+            val resolution = capture.resolutionInfo?.resolution
+            val description = listOfNotNull(
+                resolution?.let { "${maxOf(it.width, it.height)}×${minOf(it.width, it.height)}" },
+                "$fpsUsed fps",
+            ).joinToString(" · ")
+            _camera.value = _camera.value.copy(description = description, note = notes.joinToString(", ").ifEmpty { null })
+            cam.cameraInfo.zoomState.observe(owner) { z ->
+                _camera.value = _camera.value.copy(minZoom = z.minZoomRatio, maxZoom = z.maxZoomRatio, zoom = z.zoomRatio)
+            }
+            applyFocus(settings.landscapeFocus)
         }, context.mainExecutor)
+    }
+
+    private fun newOverlay(): OverlayEffect {
+        val overlay = OverlayEffect(CameraEffect.PREVIEW or CameraEffect.VIDEO_CAPTURE, 0, overlayHandler) {
+            Log.e(TAG, "overlay effect failed", it)
+        }
+        overlay.setOnDrawListener { frame ->
+            val canvas = frame.overlayCanvas
+            canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
+            renderer.draw(canvas, frame.size.width, frame.size.height, frame.rotationDegrees, GpsTracker.state.value, AppSettings.state.value)
+            true
+        }
+        return overlay
+    }
+
+    fun setZoom(ratio: Float) {
+        val c = _camera.value
+        boundCamera?.cameraControl?.setZoomRatio(ratio.coerceIn(c.minZoom, c.maxZoom))
+    }
+
+    /** Fixed focus at infinity (landscape through a window), or back to continuous autofocus. */
+    @OptIn(ExperimentalCamera2Interop::class)
+    fun applyFocus(landscape: Boolean) {
+        val cam = boundCamera ?: return
+        val control = Camera2CameraControl.from(cam.cameraControl)
+        if (landscape) {
+            control.setCaptureRequestOptions(
+                CaptureRequestOptions.Builder()
+                    .setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+                    .setCaptureRequestOption(CaptureRequest.LENS_FOCUS_DISTANCE, 0f)
+                    .build()
+            )
+        } else {
+            control.clearCaptureRequestOptions()
+        }
+    }
+
+    /** Tap to focus: autofocus and metering on the tapped point of the preview. */
+    fun focusAt(x: Float, y: Float) {
+        val cam = boundCamera ?: return
+        val view = previewView ?: return
+        val point = view.meteringPointFactory.createPoint(x, y)
+        cam.cameraControl.startFocusAndMetering(FocusMeteringAction.Builder(point).build())
     }
 
     @SuppressLint("MissingPermission") // RECORD_AUDIO is checked right before withAudioEnabled().
@@ -159,6 +265,8 @@ class CameraSession(private val context: Context) {
         provider?.unbindAll()
         effect?.close()
         effect = null
+        boundCamera = null
+        previewView = null
         overlayThread.quitSafely()
     }
 

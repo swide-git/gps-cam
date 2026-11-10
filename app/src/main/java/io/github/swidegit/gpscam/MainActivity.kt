@@ -12,6 +12,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -97,6 +99,7 @@ private enum class Tab(val label: Int, val icon: ImageVector) {
     SPEED(R.string.tab_speed, AppIcons.Speed),
     SATELLITES(R.string.tab_satellites, AppIcons.GpsFixed),
     CAMERA(R.string.tab_camera, AppIcons.Videocam),
+    TRIPS(R.string.tab_trips, AppIcons.History),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -150,6 +153,7 @@ private fun App(hasLocation: Boolean, requestLocation: () -> Unit) {
             tab == Tab.SPEED -> SpeedScreen(gps, settings, modifier)
             tab == Tab.SATELLITES -> SatellitesScreen(gps, modifier)
             tab == Tab.CAMERA -> CameraScreen(modifier, onOpenSettings = { showSettings = true })
+            tab == Tab.TRIPS -> TripsScreen(gps, settings, modifier)
         }
     }
 
@@ -191,31 +195,52 @@ private fun SettingsDialog(settings: Settings, onDismiss: () -> Unit) {
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(stringResource(R.string.settings_unit), style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SpeedUnit.entries.forEach { u ->
-                        FilterChip(
-                            selected = settings.unit == u,
-                            onClick = { AppSettings.update { it.copy(unit = u) } },
-                            label = { Text(u.label) },
-                        )
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                SettingSwitch(R.string.settings_screen_on, null, settings.keepScreenOn) { v ->
-                    AppSettings.update { it.copy(keepScreenOn = v) }
+                ChoiceRow(SpeedUnit.entries, settings.unit, { it.label }) { u -> AppSettings.update { it.copy(unit = u) } }
+
+                SectionTitle(R.string.settings_video)
+                ChoiceRow(VideoQuality.entries, settings.videoQuality, { it.label }) { q -> AppSettings.update { it.copy(videoQuality = q) } }
+                ChoiceRow(listOf(30, 60), settings.frameRate, { "$it fps" }) { f -> AppSettings.update { it.copy(frameRate = f) } }
+                SettingSwitch(R.string.settings_landscape_focus, R.string.settings_landscape_focus_hint, settings.landscapeFocus) { v ->
+                    AppSettings.update { it.copy(landscapeFocus = v) }
                 }
                 SettingSwitch(R.string.settings_audio, null, settings.recordAudio) { v ->
                     AppSettings.update { it.copy(recordAudio = v) }
                 }
+
+                SectionTitle(R.string.settings_overlay)
+                Text(stringResource(R.string.settings_overlay_position), style = MaterialTheme.typography.labelMedium, color = Palette.muted)
+                ChoiceRow(OverlayCorner.entries, settings.overlayCorner, { it.label }) { c -> AppSettings.update { it.copy(overlayCorner = c) } }
+                Text(stringResource(R.string.settings_overlay_size), style = MaterialTheme.typography.labelMedium, color = Palette.muted)
+                ChoiceRow(OverlaySize.entries, settings.overlaySize, { it.label }) { z -> AppSettings.update { it.copy(overlaySize = z) } }
+                Text(stringResource(R.string.settings_overlay_opacity), style = MaterialTheme.typography.labelMedium, color = Palette.muted)
+                ChoiceRow(listOf(0, 30, 60, 85), settings.overlayOpacity, { "$it%" }) { o -> AppSettings.update { it.copy(overlayOpacity = o) } }
                 SettingSwitch(R.string.settings_overlay_sats, null, settings.overlaySatellites) { v ->
                     AppSettings.update { it.copy(overlaySatellites = v) }
                 }
                 SettingSwitch(R.string.settings_overlay_coords, R.string.settings_overlay_coords_hint, settings.overlayCoordinates) { v ->
                     AppSettings.update { it.copy(overlayCoordinates = v) }
                 }
+
+                SectionTitle(R.string.settings_general)
+                SettingSwitch(R.string.settings_screen_on, null, settings.keepScreenOn) { v ->
+                    AppSettings.update { it.copy(keepScreenOn = v) }
+                }
             }
         },
     )
+}
+
+@Composable
+private fun SectionTitle(title: Int) {
+    Text(stringResource(title), style = MaterialTheme.typography.titleSmall, color = Palette.accent, modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun <T> ChoiceRow(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        options.forEach { o -> FilterChip(selected = o == selected, onClick = { onSelect(o) }, label = { Text(label(o)) }) }
+    }
 }
 
 @Composable
