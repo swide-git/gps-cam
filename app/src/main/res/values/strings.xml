@@ -4,10 +4,6 @@
     <string name="tab_speed">Speed</string>
     <string name="tab_satellites">Satellites</string>
     <string name="tab_camera">Camera</string>
-    <string name="notification_channel">GPS tracking</string>
-    <string name="notification_waiting">Waiting for a GPS fix</string>
-    <string name="notification_sats">%1$d/%2$d sat</string>
-    <string name="notification_stop">Stop</string>
     <string name="permission_location_title">Location access needed</string>
     <string name="permission_location_body">GPS Cam reads speed and satellites straight from the GPS receiver. Nothing leaves the phone.</string>
     <string name="permission_grant">Grant access</string>
