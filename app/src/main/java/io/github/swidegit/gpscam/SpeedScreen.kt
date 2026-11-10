@@ -133,6 +133,7 @@ fun SpeedScreen(gps: GpsState, settings: Settings, modifier: Modifier) {
             Tile(stringResource(R.string.stat_moving_time), Format.duration(trip.movingTimeMs)),
         )
         SpeedChart(gps.track, unit, Modifier.fillMaxWidth())
+        AccelerationCard(gps, unit, Modifier.fillMaxWidth())
         TileRow(
             Tile(stringResource(R.string.stat_altitude), fix?.altitudeM?.let { "${it.toInt()} m" } ?: "--"),
             Tile(stringResource(R.string.stat_heading), fix?.bearingDeg?.let { String.format(Locale.US, "%.0f° %s", it, Format.compassPoint(it)) } ?: "--"),

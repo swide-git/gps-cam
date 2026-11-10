@@ -4,6 +4,17 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -38,7 +49,7 @@ import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
 
-private data class Exported(val uri: Uri, val format: ExportFormat)
+data class Exported(val uri: Uri, val format: ExportFormat)
 
 @Composable
 fun TripsScreen(gps: GpsState, settings: Settings, modifier: Modifier) {
@@ -48,6 +59,7 @@ fun TripsScreen(gps: GpsState, settings: Settings, modifier: Modifier) {
     var exported by remember { mutableStateOf<Exported?>(null) }
     var failed by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<TripSummary?>(null) }
+    var openTrip by remember { mutableStateOf<TripSummary?>(null) }
     val unit = settings.unit
 
     fun export(tripId: Long, points: () -> List<TrackPoint>, format: ExportFormat) {
@@ -56,6 +68,24 @@ fun TripsScreen(gps: GpsState, settings: Settings, modifier: Modifier) {
             failed = uri == null
             exported = uri?.let { Exported(it, format) }
         }
+    }
+
+    // A trip deleted from its detail page closes the page.
+    openTrip?.takeIf { t -> trips.any { it.id == t.id } }?.let { t ->
+        BackHandler { openTrip = null }
+        TripDetail(
+            trip = t,
+            unit = unit,
+            modifier = modifier,
+            exported = exported,
+            failed = failed,
+            onBack = { openTrip = null },
+            onExport = { format -> export(t.id, { TripStore.points(t.id) }, format) },
+            onShare = { e -> share(context, e.uri, e.format) },
+            onDelete = { confirmDelete = t },
+        )
+        confirmDelete?.let { DeleteDialog(it, onDone = { confirmDelete = null }) }
+        return
     }
 
     LazyColumn(modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -89,7 +119,7 @@ fun TripsScreen(gps: GpsState, settings: Settings, modifier: Modifier) {
             if (trips.isEmpty()) Text(stringResource(R.string.trip_history_empty), color = Palette.muted)
         }
         items(trips, key = { it.id }) { t ->
-            Card {
+            Card(onClick = { exported = null; failed = false; openTrip = t }) {
                 TripFacts(t.id, t.endUtcMs, t.distanceM, t.maxSpeedMs, t.averageMovingSpeedMs, t.points, unit)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                     OutlinedButton(onClick = { export(t.id, { TripStore.points(t.id) }, ExportFormat.GPX) }) { Text("GPX") }
@@ -101,23 +131,110 @@ fun TripsScreen(gps: GpsState, settings: Settings, modifier: Modifier) {
         item { Spacer(Modifier.height(16.dp)) }
     }
 
-    confirmDelete?.let { t ->
-        AlertDialog(
-            onDismissRequest = { confirmDelete = null },
-            title = { Text(stringResource(R.string.delete_trip_title)) },
-            text = { Text(stringResource(R.string.delete_trip_body)) },
-            confirmButton = {
-                TextButton(onClick = { TripStore.delete(t.id); confirmDelete = null }) { Text(stringResource(R.string.delete), color = Palette.bad) }
-            },
-            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text(stringResource(R.string.cancel)) } },
+    confirmDelete?.let { DeleteDialog(it, onDone = { confirmDelete = null }) }
+}
+
+@Composable
+private fun DeleteDialog(t: TripSummary, onDone: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text(stringResource(R.string.delete_trip_title)) },
+        text = { Text(stringResource(R.string.delete_trip_body)) },
+        confirmButton = {
+            TextButton(onClick = { TripStore.delete(t.id); onDone() }) { Text(stringResource(R.string.delete), color = Palette.bad) }
+        },
+        dismissButton = { TextButton(onClick = onDone) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
+/** One saved trip: statistics, speed and altitude over time, export and delete. */
+@Composable
+private fun TripDetail(
+    trip: TripSummary,
+    unit: SpeedUnit,
+    modifier: Modifier,
+    exported: Exported?,
+    failed: Boolean,
+    onBack: () -> Unit,
+    onExport: (ExportFormat) -> Unit,
+    onShare: (Exported) -> Unit,
+    onDelete: () -> Unit,
+) {
+    val points by produceState<List<TrackPoint>?>(null, trip.id) {
+        value = withContext(Dispatchers.IO) { TripStore.points(trip.id) }
+    }
+    Column(
+        modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.close)) }
+            Column {
+                Text(DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(trip.id)), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.trip_points, trip.points), style = MaterialTheme.typography.bodySmall, color = Palette.muted)
+            }
+        }
+        DetailTiles(
+            stringResource(R.string.stat_distance) to Format.distance(trip.distanceM, unit),
+            stringResource(R.string.trip_duration) to Format.duration(trip.durationMs),
         )
+        DetailTiles(
+            stringResource(R.string.stat_max) to "${Format.speed(trip.maxSpeedMs, unit)} ${unit.label}",
+            stringResource(R.string.stat_avg) to "${Format.speed(trip.averageMovingSpeedMs, unit)} ${unit.label}",
+        )
+        val track = points
+        if (track == null) {
+            Text(stringResource(R.string.trip_loading), color = Palette.muted)
+        } else {
+            val altitudes = track.mapNotNull { it.altitudeM }
+            DetailTiles(
+                stringResource(R.string.stat_moving_time) to Format.duration(trip.movingTimeMs),
+                stringResource(R.string.trip_altitude_range) to
+                    if (altitudes.isEmpty()) "--" else "${altitudes.min().toInt()}–${altitudes.max().toInt()} m",
+            )
+            SpeedChart(track, unit, Modifier.fillMaxWidth(), showRanges = false)
+            if (altitudes.size >= 2) {
+                TrackChart(stringResource(R.string.stat_altitude), track, "m", { it.altitudeM }, fromZero = false, showRanges = false, modifier = Modifier.fillMaxWidth())
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { onExport(ExportFormat.GPX) }) { Text("GPX") }
+            OutlinedButton(onClick = { onExport(ExportFormat.CSV) }) { Text("CSV") }
+            TextButton(onClick = onDelete) { Text(stringResource(R.string.delete), color = Palette.bad) }
+        }
+        exported?.let { e ->
+            Card {
+                Text(stringResource(R.string.export_saved, e.format.extension.uppercase()))
+                TextButton(onClick = { onShare(e) }) { Text(stringResource(R.string.share)) }
+            }
+        }
+        if (failed) Text(stringResource(R.string.export_failed), color = Palette.bad)
+        Spacer(Modifier.height(8.dp))
     }
 }
 
 @Composable
-private fun Card(content: @Composable () -> Unit) {
+private fun DetailTiles(left: Pair<String, String>, right: Pair<String, String>) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        listOf(left, right).forEach { (label, value) ->
+            Column(
+                Modifier.weight(1f).background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(24.dp)).padding(horizontal = 20.dp, vertical = 14.dp),
+            ) {
+                Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f))
+                Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSecondaryContainer)
+            }
+        }
+    }
+}
+
+@Composable
+private fun Card(onClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
     Column(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(24.dp)).padding(20.dp),
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(20.dp),
     ) { content() }
 }
 

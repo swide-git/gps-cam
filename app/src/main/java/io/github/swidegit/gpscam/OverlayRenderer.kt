@@ -75,6 +75,14 @@ class OverlayRenderer {
             val alt = fix?.altitudeM?.let { "  ALT ${it.toInt()} m" } ?: ""
             add(clock + alt)
             if (settings.overlayCoordinates && fix != null) add(Format.coordinates(fix.lat, fix.lon))
+            // Acceleration timing: live while a run is on, the result for a while after it.
+            val meter = gps.meter
+            val run = gps.lastRun
+            when {
+                meter is MeterStatus.Running -> add("TIMER ${formatRunTime(meter.elapsedMs)}")
+                run != null && now - gps.lastRunElapsedMs < RESULT_SHOWN_MS ->
+                    add("${run.label}  ${formatRunTime(run.timeMs)}" + (run.trapSpeedMs?.let { " @ ${Format.speed(it, unit)} ${unit.label}" } ?: ""))
+            }
         }
 
         val speedWidth = big.measureText(speedText) + margin * 0.4f + unitPaint.measureText(unit.label)
@@ -109,6 +117,8 @@ class OverlayRenderer {
     companion object {
         /** Long side over short side of the recorded video (Quality.FHD and its fallbacks are 16:9). */
         const val VIDEO_ASPECT = 16f / 9f
+        /** How long a finished acceleration run stays in the video. */
+        const val RESULT_SHOWN_MS = 15_000L
     }
 }
 

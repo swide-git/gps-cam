@@ -23,7 +23,12 @@ speed stays accurate at any speed the receiver can track.
   time, and a speed-over-time chart (10 min, 1 h, whole trip). Jitter at a station does not add
   distance, and the maximum ignores glitches: it needs a good position, a confident Doppler speed
   and an acceleration a vehicle can reach (at most about 1.1 g).
-- **Trips**: "End trip" saves the trip (track and summary) in the app. Any trip can be exported
+- **Acceleration**: 0-100 and 100-200 km/h (0-60 and 60-130 mph with the mph unit) and the
+  quarter mile with trap speed, timed from the GPS Doppler speed with crossings interpolated
+  between fixes. Last and best times on the Speed screen; the running timer and the result also
+  appear in the video overlay.
+- **Trips**: "End trip" saves the trip (track and summary) in the app; tap a trip for its speed
+  and altitude charts. Any trip can be exported
   as GPX or CSV to `Documents/GPSCam` and shared, e.g. to view the route in Google Earth or Strava. GPS runs only while the app is on screen: no background work, no notification.
 - **Satellites**: sky plot, per-satellite C/N0 signal bars, constellation (GPS, GLONASS, Galileo,
   BeiDou, QZSS, NavIC, SBAS), band (L1/E1/B1, L5/E5a/B2a, ...), used-in-fix, time to first fix,
@@ -81,7 +86,8 @@ app/src/main/java/io/github/swidegit/gpscam/
     TripStats.kt         distance, max (spike filter), average, moving time (pure, unit-tested)
     Track.kt             track points, GPX / CSV / storage formats (pure, unit-tested)
     TripStore.kt         trip history in private storage, exports to Documents/GPSCam
-    SpeedChart.kt, TripsScreen.kt
+    Performance.kt       acceleration timing (pure, unit-tested); PerformanceStore.kt keeps the times
+    SpeedChart.kt, TripsScreen.kt, AccelerationCard.kt
     Gnss.kt              constellations, bands, NMEA GSA parser
     Format.kt            units and number formatting
     CameraSession.kt     CameraX preview + VideoCapture + OverlayEffect, .srt writer

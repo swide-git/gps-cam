@@ -37,10 +37,14 @@ SPEED
 • Age of the last fix, so you know when a tunnel has frozen the reading
 • Speed chart for the last 10 minutes, the last hour or the whole trip
 
+ACCELERATION
+• 0-100 and 100-200 km/h (0-60 and 60-130 mph) and the quarter mile with trap speed
+• Timed from the GPS speed, last and best times, and the result shown in your video
+
 TRIPS
 • Maximum and average moving speed, distance, moving time and trip time
 • GPS glitches are ignored: the maximum needs a good fix, a confident speed and an acceleration a vehicle can actually reach
-• Save trips to the history and export them as GPX or CSV, for example to see the route in Google Earth
+• Save trips to the history, see each trip's speed and altitude charts, and export them as GPX or CSV, for example to see the route in Google Earth
 
 SATELLITES
 • Sky plot and signal strength of every satellite
@@ -66,14 +70,10 @@ Tip for trains: hold the phone against the window. Coated glass and the metal bo
 
 ```
 <en-US>
-- Trips: save each trip and export it as GPX or CSV
-- Speed chart for the last 10 min, 1 h or the whole trip
-- Camera: 720p, 1080p or 4K at 30 or 60 fps, zoom (incl. 0.5x), tap to focus
-- Landscape focus for filming through a train window
-- Video overlay: choose corner, size and opacity; it no longer gets cut off
-- More reliable max speed: GPS glitches are ignored
-- GPS runs only while the app is open
-- New look, following your wallpaper colours like Second Display
+- Acceleration timer: 0-100 and 100-200 km/h (0-60 and 60-130 mph) and the quarter mile, with last and best times and the result in your video
+- Trip details: speed and altitude charts for every saved trip
+- Camera buttons moved below the preview, so they no longer hide the overlay
+- Fixed: the camera could close the app on some phones
 </en-US>
 ```
 

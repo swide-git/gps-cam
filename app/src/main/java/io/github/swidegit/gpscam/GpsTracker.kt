@@ -44,6 +44,12 @@ data class GpsState(
     val trip: TripSnapshot = TripSnapshot(),
     /** Points of the current trip (for the speed chart); the same points go to [TripStore]. */
     val track: List<TrackPoint> = emptyList(),
+    /** Acceleration meter state and the latest completed run (shown for a while, also in the video). */
+    val meter: MeterStatus = MeterStatus.NeedStop,
+    val lastRun: RunResult? = null,
+    val lastRunElapsedMs: Long = 0,
+    /** Location updates per second, measured: timing precision depends on it. */
+    val updateHz: Double? = null,
     val error: String? = null,
 ) {
     val usedInFix: Int get() = satellites.count { it.usedInFix }
@@ -71,6 +77,9 @@ object GpsTracker {
     private val trip = TripStats()
     private var tripId: Long? = null
     private val track = ArrayList<TrackPoint>()
+    private var meterUnit: SpeedUnit? = null
+    private var meter = PerformanceMeter(emptyList())
+    private val recentFixes = ArrayDeque<Long>()
     private var thread: HandlerThread? = null
     private var manager: LocationManager? = null
 
@@ -116,6 +125,7 @@ object GpsTracker {
     fun start(context: Context) {
         if (thread != null) return
         TripStore.init(context)
+        PerformanceStore.init(context)
         val lm = context.applicationContext.getSystemService(LocationManager::class.java)
         val t = HandlerThread("gps").apply { start() }
         val handler = Handler(t.looper)
@@ -205,6 +215,24 @@ object GpsTracker {
             elapsedMs = elapsedMs,
             utcMs = loc.time,
         )
-        _state.update { it.copy(fix = gpsFix, trip = snapshot, track = points ?: it.track, providerEnabled = true) }
+        // Acceleration timing uses the receiver's Doppler speed only: derived speeds lag.
+        val unit = AppSettings.state.value.unit
+        if (unit != meterUnit) {
+            meterUnit = unit
+            meter = PerformanceMeter(Runs.forUnit(unit))
+        }
+        val runs = if (loc.hasSpeed()) meter.add(elapsedMs, loc.speed.toDouble(), loc.time) else emptyList()
+        PerformanceStore.add(runs)
+        recentFixes.addLast(elapsedMs)
+        while (recentFixes.size > 10) recentFixes.removeFirst()
+        val hz = if (recentFixes.size >= 3) (recentFixes.size - 1) * 1000.0 / (recentFixes.last() - recentFixes.first()).coerceAtLeast(1) else null
+        _state.update {
+            it.copy(
+                fix = gpsFix, trip = snapshot, track = points ?: it.track, providerEnabled = true,
+                meter = meter.status, updateHz = hz,
+                lastRun = runs.lastOrNull() ?: it.lastRun,
+                lastRunElapsedMs = if (runs.isNotEmpty()) elapsedMs else it.lastRunElapsedMs,
+            )
+        }
     }
 }
