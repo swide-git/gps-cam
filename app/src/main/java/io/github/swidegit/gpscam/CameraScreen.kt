@@ -24,6 +24,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import java.util.Locale
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -135,21 +139,24 @@ fun CameraScreen(modifier: Modifier, onOpenSettings: () -> Unit) {
             LensChip(
                 label = if (z < 1f) "${"%.1f".format(Locale.US, z)}×" else "${z.toInt()}×",
                 selected = kotlin.math.abs(camera.zoom - z) < 0.05f,
+                description = stringResource(R.string.zoom_to, z),
             ) { session.setZoom(z) }
         }
     }
     val recordButton: @Composable () -> Unit = {
+        val description = stringResource(if (recording) R.string.stop_recording else R.string.start_recording)
         Box(
             Modifier.size(64.dp).border(3.dp, Color.White, CircleShape).padding(6.dp)
                 .background(Palette.record, if (recording) RoundedCornerShape(8.dp) else CircleShape)
-                .clickable { toggleRecording() },
+                .clickable(onClickLabel = description, role = Role.Button) { toggleRecording() }
+                .semantics { contentDescription = description },
         )
     }
     val actions: @Composable () -> Unit = {
         RoundButton(onClick = { session.takePhoto() }) {
             Icon(AppIcons.PhotoCamera, contentDescription = stringResource(R.string.take_photo), tint = Color.White, modifier = Modifier.size(22.dp))
         }
-        LensChip(label = "∞", selected = settings.landscapeFocus) {
+        LensChip(label = "∞", selected = settings.landscapeFocus, description = stringResource(R.string.settings_landscape_focus)) {
             AppSettings.update { it.copy(landscapeFocus = !it.landscapeFocus) }
         }
         RoundButton(onClick = onOpenSettings) {
@@ -254,11 +261,12 @@ private fun zoomPresets(min: Float, max: Float): List<Float> =
 private fun Modifier.chip() = background(Color(0x99000000), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp)
 
 @Composable
-private fun LensChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun LensChip(label: String, selected: Boolean, description: String, onClick: () -> Unit) {
     Box(
         Modifier.size(40.dp)
             .background(if (selected) Palette.overlayAccent else Color(0xFF2A2A2A), CircleShape)
-            .clickable(onClick = onClick),
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = description; this.selected = selected },
         contentAlignment = Alignment.Center,
     ) {
         Text(label, color = if (selected) Color.Black else Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)

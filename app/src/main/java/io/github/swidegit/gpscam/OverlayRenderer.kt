@@ -44,7 +44,13 @@ class OverlayRenderer {
      * [width]x[height] is the buffer; [rotationDegrees] is how the buffer is rotated for display,
      * so the canvas is turned the other way to keep the text upright in the finished video.
      */
-    fun draw(canvas: Canvas, width: Int, height: Int, rotationDegrees: Int, gps: GpsState, settings: Settings) {
+    /** Everything the box shows, plus what it was computed from, so a frame can reuse it. */
+    private class Frame(val gps: GpsState, val trip: TripState, val settings: Settings, val second: Long, val speedText: String, val fresh: Boolean, val lines: List<String>)
+    private var frame: Frame? = null
+    private var chartSource: List<TrackPoint>? = null
+    private var chart: List<Pair<Float, Float>> = emptyList()
+
+    fun draw(canvas: Canvas, width: Int, height: Int, rotationDegrees: Int, gps: GpsState, trip: TripState, recent: List<TrackPoint>, settings: Settings) {
         canvas.save()
         val (w, h) = when (rotationDegrees) {
             90 -> { canvas.translate(0f, height.toFloat()); canvas.rotate(-90f); height to width }
@@ -56,30 +62,27 @@ class OverlayRenderer {
         // which cut the box off at the frame edges. Draw only inside the centred 16:9 area.
         val visible = visibleArea(w.toFloat(), h.toFloat(), VIDEO_ASPECT)
         canvas.translate(visible.left, visible.top)
-        drawUpright(canvas, visible.width, visible.height, gps, settings)
+        drawUpright(canvas, visible.width, visible.height, frameFor(gps, trip, settings), recent)
         canvas.restore()
     }
 
-    private fun drawUpright(canvas: Canvas, w: Float, h: Float, gps: GpsState, settings: Settings, scale: Float = 1f) {
-        val unit = settings.unit
-        val short = min(w, h)
-        val margin = short * 0.035f
-        val size = scale * settings.overlaySize.scale
-        big.textSize = short * 0.13f * size
-        unitPaint.textSize = short * 0.05f * size
-        small.textSize = short * 0.032f * size
-        box.alpha = settings.overlayOpacity.coerceIn(0, 100) * 255 / 100
-
+    /**
+     * The texts change a couple of times a second (new fix, new satellite list, the clock); the
+     * frames come at 30 or 60 Hz. Formatting on every frame churned the overlay thread with
+     * garbage, so the texts are rebuilt only when one of their inputs changes.
+     */
+    private fun frameFor(gps: GpsState, trip: TripState, settings: Settings): Frame {
         val now = SystemClock.elapsedRealtime()
+        val second = now / 1000
+        frame?.let { if (it.gps === gps && it.trip === trip && it.settings === settings && it.second == second) return it }
+        val unit = settings.unit
         val fix = gps.fix
         val fresh = gps.isFresh(now)
         val speedText = fix?.speedMs?.let { Format.speed(it, unit) } ?: "--"
-        big.alpha = if (fresh) 255 else 110
-
         val lines = buildList {
             // Maximum and distance belong to a trip; without one the box shows live values only.
             val parts = mutableListOf<String>()
-            if (gps.tripActive) parts += "MAX ${Format.speed(gps.trip.maxSpeedMs, unit)}"
+            if (trip.active) parts += "MAX ${Format.speed(trip.trip.maxSpeedMs, unit)}"
             if (settings.overlaySatellites) parts += "SAT ${gps.usedInFix}/${gps.satellites.size}"
             fix?.accuracyM?.let { parts += "±${it.toInt()} m" }
             if (!fresh) parts += if (fix == null) "NO FIX" else "FIX ${(now - fix.elapsedMs) / 1000} s"
@@ -89,7 +92,7 @@ class OverlayRenderer {
             add(clock + alt)
             val extra = buildList {
                 if (settings.overlayHeading) fix?.bearingDeg?.let { add(String.format(Locale.US, "HDG %03.0f° %s", it, Format.compassPoint(it))) }
-                if (settings.overlayDistance && gps.tripActive) add("DIST ${Format.distance(gps.trip.distanceM, unit)}")
+                if (settings.overlayDistance && trip.active) add("DIST ${Format.distance(trip.trip.distanceM, unit)}")
             }
             if (extra.isNotEmpty()) add(extra.joinToString("  "))
             if (settings.overlayCoordinates && fix != null) add(Format.coordinates(fix.lat, fix.lon))
@@ -102,17 +105,38 @@ class OverlayRenderer {
                     add("${run.label}  ${formatRunTime(run.timeMs)}" + (run.trapSpeedMs?.let { " @ ${Format.speed(it, unit)} ${unit.label}" } ?: ""))
             }
         }
+        return Frame(gps, trip, settings, second, speedText, fresh, lines).also { frame = it }
+    }
+
+    private fun drawUpright(canvas: Canvas, w: Float, h: Float, f: Frame, recent: List<TrackPoint>, scale: Float = 1f) {
+        val settings = f.settings
+        val unit = settings.unit
+        val short = min(w, h)
+        val margin = short * 0.035f
+        val size = scale * settings.overlaySize.scale
+        big.textSize = short * 0.13f * size
+        unitPaint.textSize = short * 0.05f * size
+        small.textSize = short * 0.032f * size
+        box.alpha = settings.overlayOpacity.coerceIn(0, 100) * 255 / 100
+        val speedText = f.speedText
+        val lines = f.lines
+        big.alpha = if (f.fresh) 255 else 110
 
         val speedWidth = big.measureText(speedText) + margin * 0.4f + unitPaint.measureText(unit.label)
         val lineHeight = small.textSize * 1.3f
         val boxWidth = max(speedWidth, lines.maxOf { small.measureText(it) }) + margin * 2
         if (scale == 1f && boxWidth > w - margin * 2) {
             // Narrow portrait frames: shrink the text until the box fits between the margins.
-            return drawUpright(canvas, w, h, gps, settings, (w - margin * 4) / (boxWidth - margin * 2))
+            return drawUpright(canvas, w, h, f, recent, (w - margin * 4) / (boxWidth - margin * 2))
         }
         val bigAscent = -big.ascent()
         // Mini chart of the last minute under the speed, as wide as the text.
-        val chart = if (settings.overlayChart) recentSpeeds(gps, unit) else emptyList()
+        // The point list is published every couple of seconds; resample only when it changes.
+        if (settings.overlayChart && recent !== chartSource) {
+            chartSource = recent
+            chart = recentSpeeds(recent, unit)
+        }
+        val chart = if (settings.overlayChart) chart else emptyList()
         val chartHeight = if (chart.size >= 2) small.textSize * 2.4f else 0f
         val boxHeight = bigAscent + big.descent() * 0.4f + chartHeight + lines.size * lineHeight + margin * 1.4f
         val left = when (settings.overlayCorner) {
@@ -140,8 +164,7 @@ class OverlayRenderer {
     }
 
     /** (seconds before now, speed in [unit]) for the last [CHART_WINDOW_MS] of the track. */
-    private fun recentSpeeds(gps: GpsState, unit: SpeedUnit): List<Pair<Float, Float>> {
-        val track = gps.recent
+    private fun recentSpeeds(track: List<TrackPoint>, unit: SpeedUnit): List<Pair<Float, Float>> {
         val end = track.lastOrNull()?.utcMs ?: return emptyList()
         val out = ArrayList<Pair<Float, Float>>()
         for (i in track.indices.reversed()) {

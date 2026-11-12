@@ -4,7 +4,8 @@ import android.view.KeyEvent
 
 /**
  * Volume keys as a shutter on the Camera tab: up starts or stops recording, down takes a photo.
- * The camera screen installs [handler] while it is visible; the activity forwards key events.
+ * The camera screen installs [handler] while it is visible; the activity forwards key events
+ * (onKeyDown and onKeyUp, so the system never sees either half of the press).
  */
 object VolumeKeys {
     @Volatile var handler: ((up: Boolean) -> Unit)? = null

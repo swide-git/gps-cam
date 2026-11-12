@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -87,7 +88,8 @@ private fun LandscapeSpeed(gps: GpsState, settings: Settings, modifier: Modifier
     val unit = settings.unit
     val fix = gps.fix
     val fresh = gps.isFresh(now)
-    val trip = gps.trip
+    val tripState by TripRecorder.state.collectAsStateWithLifecycle()
+    val trip = tripState.trip
     Row(modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         val onHero = MaterialTheme.colorScheme.onPrimaryContainer
         Column(
@@ -124,7 +126,7 @@ private fun LandscapeSpeed(gps: GpsState, settings: Settings, modifier: Modifier
             Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
         ) {
-            if (gps.tripActive) {
+            if (tripState.active) {
                 TileRow(
                     Tile(stringResource(R.string.stat_max), "${Format.speed(trip.maxSpeedMs, unit)} ${unit.label}"),
                     Tile(stringResource(R.string.stat_avg), "${Format.speed(trip.averageMovingSpeedMs, unit)} ${unit.label}"),
@@ -150,7 +152,11 @@ private fun PortraitSpeed(gps: GpsState, settings: Settings, modifier: Modifier)
     val unit = settings.unit
     val fix = gps.fix
     val fresh = gps.isFresh(now)
-    val trip = gps.trip
+    // The trip and the point lists have flows of their own, published every few seconds.
+    val tripState by TripRecorder.state.collectAsStateWithLifecycle()
+    val track by TripRecorder.track.collectAsStateWithLifecycle()
+    val recent by TripRecorder.recent.collectAsStateWithLifecycle()
+    val trip = tripState.trip
     Column(
         modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -198,7 +204,7 @@ private fun PortraitSpeed(gps: GpsState, settings: Settings, modifier: Modifier)
             }
         }
 
-        if (gps.tripActive) {
+        if (tripState.active) {
             TileRow(
                 Tile(stringResource(R.string.stat_max), "${Format.speed(trip.maxSpeedMs, unit)} ${unit.label}"),
                 Tile(stringResource(R.string.stat_avg), "${Format.speed(trip.averageMovingSpeedMs, unit)} ${unit.label}"),
@@ -211,14 +217,14 @@ private fun PortraitSpeed(gps: GpsState, settings: Settings, modifier: Modifier)
             StartTripCard()
         }
         // The trip when one runs (it can be longer than the last hour), the last hour otherwise.
-        SpeedChart(if (gps.tripActive && gps.track.size >= 2) gps.track else gps.recent, unit, Modifier.fillMaxWidth())
+        SpeedChart(if (tripState.active && track.size >= 2) track else recent, unit, Modifier.fillMaxWidth())
         AccelerationCard(gps, unit, Modifier.fillMaxWidth())
         TileRow(
             Tile(stringResource(R.string.stat_altitude), fix?.altitudeM?.let { Format.altitude(it, unit) } ?: "--"),
             Tile(stringResource(R.string.stat_heading), fix?.bearingDeg?.let { String.format(Locale.US, "%.0f° %s", it, Format.compassPoint(it)) } ?: "--"),
         )
         TileRow(
-            Tile(stringResource(R.string.stat_trip_time), if (gps.tripActive) Format.duration(trip.elapsedMs) else "--"),
+            Tile(stringResource(R.string.stat_trip_time), if (tripState.active) Format.duration(trip.elapsedMs) else "--"),
             Tile(stringResource(R.string.stat_ttff), gps.ttffMs?.let { String.format(Locale.US, "%.1f s", it / 1000.0) } ?: "--"),
         )
         if (fix != null) {
@@ -229,9 +235,9 @@ private fun PortraitSpeed(gps: GpsState, settings: Settings, modifier: Modifier)
                 Text(Format.coordinates(fix.lat, fix.lon), style = MaterialTheme.typography.titleMedium)
             }
         }
-        if (gps.tripActive) {
+        if (tripState.active) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                FilledTonalButton(onClick = { GpsTracker.endTrip() }) {
+                FilledTonalButton(onClick = { TripRecorder.endTrip() }) {
                     Icon(Icons.Filled.Refresh, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.end_trip))
@@ -251,7 +257,7 @@ fun StartTripCard(modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(stringResource(R.string.trip_idle), color = MaterialTheme.colorScheme.onSecondaryContainer, textAlign = TextAlign.Center)
-        FilledTonalButton(onClick = { GpsTracker.startTrip() }, modifier = Modifier.padding(top = 10.dp)) {
+        FilledTonalButton(onClick = { TripRecorder.startTrip() }, modifier = Modifier.padding(top = 10.dp)) {
             Text(stringResource(R.string.start_trip))
         }
     }

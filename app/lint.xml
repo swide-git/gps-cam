@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- Lint suggests merging the folder into mipmap-anydpi because minSdk is 29, but AAPT then
+         fails to find the adaptive icon: the -v26 qualifier has to stay. -->
+    <issue id="ObsoleteSdkInt">
+        <ignore path="src/main/res/mipmap-anydpi-v26" />
+    </issue>
+</lint>

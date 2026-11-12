@@ -40,6 +40,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -58,6 +59,8 @@ fun TripsScreen(gps: GpsState, settings: Settings, modifier: Modifier) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val trips by TripStore.trips.collectAsStateWithLifecycle()
+    val tripState by TripRecorder.state.collectAsStateWithLifecycle()
+    val track by TripRecorder.track.collectAsStateWithLifecycle()
     var exported by remember { mutableStateOf<Exported?>(null) }
     var failed by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<TripSummary?>(null) }
@@ -92,23 +95,25 @@ fun TripsScreen(gps: GpsState, settings: Settings, modifier: Modifier) {
 
     LazyColumn(modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
-            val current = GpsTracker.currentTripId()
+            val current = tripState.tripId
             Card {
                 Text(stringResource(R.string.trip_current), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                if (!gps.tripActive) {
+                if (!tripState.active) {
                     Text(stringResource(R.string.trip_idle), color = Palette.muted)
-                    FilledTonalButton(onClick = { GpsTracker.startTrip() }, modifier = Modifier.padding(top = 8.dp)) {
+                    FilledTonalButton(onClick = { TripRecorder.startTrip() }, modifier = Modifier.padding(top = 8.dp)) {
                         Text(stringResource(R.string.start_trip))
                     }
-                } else if (current == null || gps.track.size < 2) {
+                } else if (current == null || track.size < 2) {
                     Text(stringResource(R.string.trip_current_empty), color = Palette.muted)
-                    TextButton(onClick = { GpsTracker.endTrip() }) { Text(stringResource(R.string.end_trip)) }
+                    TextButton(onClick = { TripRecorder.endTrip() }) { Text(stringResource(R.string.end_trip)) }
                 } else {
-                    TripFacts(current, gps.track.last().utcMs, gps.trip.distanceM, gps.trip.maxSpeedMs, gps.trip.averageMovingSpeedMs, gps.track.size, unit)
+                    val trip = tripState.trip
+                    TripFacts(current, track.last().utcMs, trip.distanceM, trip.maxSpeedMs, trip.averageMovingSpeedMs, track.size, unit)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                        Button(onClick = { GpsTracker.endTrip() }) { Text(stringResource(R.string.end_trip)) }
-                        OutlinedButton(onClick = { export(current, { gps.track }, ExportFormat.GPX) }) { Text("GPX") }
-                        OutlinedButton(onClick = { export(current, { gps.track }, ExportFormat.CSV) }) { Text("CSV") }
+                        Button(onClick = { TripRecorder.endTrip() }) { Text(stringResource(R.string.end_trip)) }
+                        // The latest points, not the throttled copy, so the export is complete.
+                        OutlinedButton(onClick = { export(current, { TripStore.points(current) }, ExportFormat.GPX) }) { Text("GPX") }
+                        OutlinedButton(onClick = { export(current, { TripStore.points(current) }, ExportFormat.CSV) }) { Text("CSV") }
                     }
                 }
             }
@@ -179,7 +184,7 @@ private fun TripDetail(
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.close)) }
             Column {
                 Text(DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(trip.id)), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(stringResource(R.string.trip_points, trip.points), style = MaterialTheme.typography.bodySmall, color = Palette.muted)
+                Text(pluralStringResource(R.plurals.trip_points, trip.points, trip.points), style = MaterialTheme.typography.bodySmall, color = Palette.muted)
             }
         }
         DetailTiles(
@@ -262,7 +267,7 @@ private fun TripFacts(startUtc: Long, endUtc: Long, distanceM: Double, maxMs: Do
             "max ${Format.speed(maxMs, unit)} · avg ${Format.speed(avgMs, unit)} ${unit.label}",
         color = Palette.muted,
     )
-    Text(stringResource(R.string.trip_points, points), style = MaterialTheme.typography.bodySmall, color = Palette.muted)
+    Text(pluralStringResource(R.plurals.trip_points, points, points), style = MaterialTheme.typography.bodySmall, color = Palette.muted)
 }
 
 private fun share(context: Context, uri: Uri, format: ExportFormat) {

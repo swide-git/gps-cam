@@ -118,6 +118,10 @@ jobs:
       - name: Unit tests
         run: ./gradlew --no-daemon :app:testDebugUnitTest
 
+      - name: Lint
+        # The full check, not only the "vital" subset that assembleRelease runs.
+        run: ./gradlew --no-daemon :app:lintRelease
+
       - name: Build APK and App Bundle
         run: |
           mkdir -p dist

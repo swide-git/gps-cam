@@ -109,7 +109,9 @@ class MainActivity : ComponentActivity() {
         GpsTracker.stop()
     }
 
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean = VolumeKeys.onKey(event) || super.dispatchKeyEvent(event)
+    // Both directions: consuming only the press would still let the release change the volume.
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean = VolumeKeys.onKey(event) || super.onKeyDown(keyCode, event)
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean = VolumeKeys.onKey(event) || super.onKeyUp(keyCode, event)
 
     private fun refreshPermission() {
         hasLocation = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED

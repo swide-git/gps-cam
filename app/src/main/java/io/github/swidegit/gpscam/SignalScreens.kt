@@ -20,6 +20,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -106,11 +109,12 @@ fun BandStatsCard(sats: List<Satellite>) {
 /** Average signal per direction since the last reset: where the sky is open from this seat. */
 @Composable
 fun SkyMapSection(gps: GpsState, modifier: Modifier) {
+    val skyMap by SignalStats.skyMap.collectAsStateWithLifecycle()
     Column(modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionCard(stringResource(R.string.skymap_title)) {
             Text(stringResource(R.string.skymap_hint), style = MaterialTheme.typography.bodySmall, color = Palette.muted)
             Spacer(Modifier.height(8.dp))
-            SignalSkyPlot(gps.skyMap, gps.satellites, Modifier.widthIn(max = 380.dp).fillMaxWidth().aspectRatio(1f).align(Alignment.CenterHorizontally))
+            SignalSkyPlot(skyMap, gps.satellites, Modifier.widthIn(max = 380.dp).fillMaxWidth().aspectRatio(1f).align(Alignment.CenterHorizontally))
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)) {
                 listOf(15.0 to "15", 25.0 to "25", 35.0 to "35", 45.0 to "45 dB-Hz").forEach { (v, label) ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -119,10 +123,10 @@ fun SkyMapSection(gps: GpsState, modifier: Modifier) {
                     }
                 }
             }
-            val samples = gps.skyMap.sumOf { it.samples }
+            val samples = skyMap.sumOf { it.samples }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                Text(stringResource(R.string.skymap_samples, samples), style = MaterialTheme.typography.bodySmall, color = Palette.muted, modifier = Modifier.weight(1f))
-                TextButton(onClick = { GpsTracker.resetSignalStats() }) { Text(stringResource(R.string.reset)) }
+                Text(pluralStringResource(R.plurals.skymap_samples, samples, samples), style = MaterialTheme.typography.bodySmall, color = Palette.muted, modifier = Modifier.weight(1f))
+                TextButton(onClick = { SignalStats.reset() }) { Text(stringResource(R.string.reset)) }
             }
         }
     }
@@ -178,8 +182,9 @@ private fun Rect(center: Offset, radius: Float) = Rect(center - Offset(radius, r
 @Composable
 fun HistorySection(gps: GpsState, modifier: Modifier) {
     val ttff by TtffStore.records.collectAsStateWithLifecycle()
+    val quality by SignalStats.quality.collectAsStateWithLifecycle()
     Column(modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        val q = summarizeQuality(gps.quality)
+        val q = remember(quality) { summarizeQuality(quality) }
         SectionCard(stringResource(R.string.quality_title)) {
             if (q == null) {
                 Text(stringResource(R.string.quality_empty), color = Palette.muted)
@@ -191,9 +196,9 @@ fun HistorySection(gps: GpsState, modifier: Modifier) {
                 q.meanAccuracyM?.let { KeyValue(stringResource(R.string.quality_accuracy), String.format(Locale.US, "±%.1f m", it)) }
             }
         }
-        TimeChart(stringResource(R.string.chart_sats), gps.quality, { it.utcMs }, { it.used.toDouble() }, "sat", fromZero = true, showRanges = true, modifier = Modifier.fillMaxWidth())
-        TimeChart(stringResource(R.string.chart_cn0), gps.quality, { it.utcMs }, { it.meanCn0 }, "dB-Hz", fromZero = true, showRanges = true, modifier = Modifier.fillMaxWidth())
-        TimeChart(stringResource(R.string.chart_accuracy), gps.quality, { it.utcMs }, { it.accuracyM }, "m", fromZero = true, showRanges = true, modifier = Modifier.fillMaxWidth())
+        TimeChart(stringResource(R.string.chart_sats), quality, { it.utcMs }, { it.used.toDouble() }, "sat", fromZero = true, showRanges = true, modifier = Modifier.fillMaxWidth())
+        TimeChart(stringResource(R.string.chart_cn0), quality, { it.utcMs }, { it.meanCn0 }, "dB-Hz", fromZero = true, showRanges = true, modifier = Modifier.fillMaxWidth())
+        TimeChart(stringResource(R.string.chart_accuracy), quality, { it.utcMs }, { it.accuracyM }, "m", fromZero = true, showRanges = true, modifier = Modifier.fillMaxWidth())
         SectionCard(stringResource(R.string.ttff_title)) {
             if (ttff.isEmpty()) Text(stringResource(R.string.ttff_empty), color = Palette.muted)
             val format = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
@@ -210,7 +215,12 @@ fun HistorySection(gps: GpsState, modifier: Modifier) {
 /** Raw-measurement details: receiver gain per band (interference), multipath, and time. */
 @Composable
 fun ReceiverSection(gps: GpsState, modifier: Modifier) {
-    val rx = gps.receiver
+    val rx by SignalStats.receiver.collectAsStateWithLifecycle()
+    // Raw measurements are registered only while this view is open (battery).
+    DisposableEffect(Unit) {
+        GpsTracker.setMeasurementsWanted(true)
+        onDispose { GpsTracker.setMeasurementsWanted(false) }
+    }
     Column(modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionCard(stringResource(R.string.interference_title)) {
             when (rx.measurements) {
@@ -254,7 +264,7 @@ fun ReceiverSection(gps: GpsState, modifier: Modifier) {
             }
         }
         SectionCard(stringResource(R.string.time_title)) {
-            val offset = rx.clockOffsetMs
+            val offset = gps.clockOffsetMs
             KeyValue(
                 stringResource(R.string.time_offset),
                 offset?.let {

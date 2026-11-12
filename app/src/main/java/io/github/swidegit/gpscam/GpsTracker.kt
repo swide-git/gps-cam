@@ -2,7 +2,6 @@ package io.github.swidegit.gpscam
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.location.GnssMeasurement
 import android.location.GnssMeasurementsEvent
 import android.location.GnssStatus
 import android.location.Location
@@ -35,21 +34,11 @@ data class GpsFix(
     val utcMs: Long,
 )
 
-enum class MeasurementsStatus { UNKNOWN, OK, NOT_SUPPORTED, LOCATION_DISABLED }
-
-/** Raw-measurement and clock details (Android GnssMeasurement / GnssClock). */
-data class ReceiverInfo(
-    val measurements: MeasurementsStatus = MeasurementsStatus.UNKNOWN,
-    val agc: List<AgcMonitor.Band> = emptyList(),
-    /** Measurements flagged by the chip as affected by multipath in the latest epoch. */
-    val multipath: Int = 0,
-    val measured: Int = 0,
-    val leapSeconds: Int? = null,
-    val timeUncertaintyNs: Double? = null,
-    /** Phone clock minus GPS time (positive: the phone is ahead). */
-    val clockOffsetMs: Double? = null,
-)
-
+/**
+ * What the receiver reports right now. Deliberately small and without the growing lists (track,
+ * quality samples, sky map), which live in [TripRecorder] and [SignalStats] and are published on
+ * their own: every screen collects this, and it changes a couple of times a second.
+ */
 data class GpsState(
     val running: Boolean = false,
     val providerEnabled: Boolean = true,
@@ -58,24 +47,14 @@ data class GpsState(
     val fixType: FixType = FixType.NONE,
     val dop: Dop? = null,
     val ttffMs: Int? = null,
-    val trip: TripSnapshot = TripSnapshot(),
-    /** Points of the current trip; the same points go to [TripStore]. Empty while no trip runs. */
-    val track: List<TrackPoint> = emptyList(),
-    /** True while a trip is being recorded (started by the user, or automatically when enabled). */
-    val tripActive: Boolean = false,
-    /** The last hour of points, kept in memory only: speed chart and overlay chart without a trip. */
-    val recent: List<TrackPoint> = emptyList(),
     /** Acceleration meter state and the latest completed run (shown for a while, also in the video). */
     val meter: MeterStatus = MeterStatus.NeedStop,
     val lastRun: RunResult? = null,
     val lastRunElapsedMs: Long = 0,
     /** Location updates per second, measured: timing precision depends on it. */
     val updateHz: Double? = null,
-    /** Average signal per direction of the sky since the last reset. */
-    val skyMap: List<SignalSkyMap.Cell> = emptyList(),
-    /** One sample per second of the current trip, for the quality charts. */
-    val quality: List<QualitySample> = emptyList(),
-    val receiver: ReceiverInfo = ReceiverInfo(),
+    /** Phone clock minus GPS time (positive: the phone is ahead). */
+    val clockOffsetMs: Double? = null,
     val error: String? = null,
 ) {
     val usedInFix: Int get() = satellites.count { it.usedInFix }
@@ -93,42 +72,25 @@ data class GpsState(
  * Raw GNSS receiver, process-wide. Deliberately GPS_PROVIDER and not the fused provider: the fused
  * provider blends Wi-Fi and cell positions and smooths speed, which is what breaks map apps on fast
  * trains (station Wi-Fi, cell towers far behind). The chip's Doppler speed is accurate at 300 km/h.
+ * Fixes go on to [TripRecorder], satellite and raw-measurement events to [SignalStats].
  */
 object GpsTracker {
     private const val TAG = "GpsTracker"
-    private const val TRACK_MAX_ACCURACY_M = 50.0
-    private const val RECENT_MS = 60 * 60_000L
     private val _state = MutableStateFlow(GpsState())
     val state: StateFlow<GpsState> = _state
 
-    private val trip = TripStats()
     /** Speed derivation for chips without Doppler speed; fed with every fix, trip or not. */
     private val live = TripStats()
-    private var tripId: Long? = null
-    private var tripActive = false
-    private val track = ArrayList<TrackPoint>()
-    private val recent = ArrayList<TrackPoint>()
     private var meterUnit: SpeedUnit? = null
     private var meter = PerformanceMeter(emptyList())
     private val recentFixes = ArrayDeque<Long>()
-    private val skyMap = SignalSkyMap()
-    private val agc = AgcMonitor()
-    private val quality = ArrayList<QualitySample>()
 
-    private val measurementsCallback = object : GnssMeasurementsEvent.Callback() {
-        override fun onGnssMeasurementsReceived(event: GnssMeasurementsEvent) = onMeasurements(event)
-        override fun onStatusChanged(status: Int) {
-            val s = when (status) {
-                STATUS_READY -> MeasurementsStatus.OK
-                STATUS_NOT_SUPPORTED -> MeasurementsStatus.NOT_SUPPORTED
-                STATUS_LOCATION_DISABLED -> MeasurementsStatus.LOCATION_DISABLED
-                else -> MeasurementsStatus.UNKNOWN
-            }
-            _state.update { it.copy(receiver = it.receiver.copy(measurements = s)) }
-        }
-    }
     private var thread: HandlerThread? = null
+    private var handler: Handler? = null
     private var manager: LocationManager? = null
+    // Raw measurements cost battery on some chips: registered only while a screen wants them.
+    private var measurementsWanted = 0
+    private var measurementsRegistered = false
 
     private val locationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) = onLocation(location)
@@ -155,25 +117,8 @@ object GpsTracker {
                     carrierHz = if (status.hasCarrierFrequencyHz(i)) status.getCarrierFrequencyHz(i).toDouble() else null,
                 )
             }
-            val now = SystemClock.elapsedRealtime()
-            val current = _state.value
-            val sample = QualitySample(
-                utcMs = System.currentTimeMillis(),
-                used = sats.count { it.usedInFix },
-                visible = sats.size,
-                accuracyM = current.fix?.accuracyM?.takeIf { current.isFresh(now) },
-                meanCn0 = topMeanCn0(sats),
-                fix3d = current.isFresh(now) && current.fixType != FixType.FIX_2D,
-                hasFix = current.isFresh(now),
-            )
-            val (cells, samples) = synchronized(quality) {
-                skyMap.add(sats)
-                quality += sample
-                // About six hours at one sample per second.
-                if (quality.size > 21_600) quality.subList(0, quality.size - 21_600).clear()
-                skyMap.cells() to quality.toList()
-            }
-            _state.update { it.copy(satellites = sats, skyMap = cells, quality = samples) }
+            SignalStats.onSatellites(sats, _state.value, SystemClock.elapsedRealtime())
+            _state.update { it.copy(satellites = sats) }
         }
 
         override fun onFirstFix(ttffMillis: Int) {
@@ -188,37 +133,38 @@ object GpsTracker {
         Nmea.parseGsa(message)?.let { gsa -> _state.update { it.copy(fixType = gsa.fixType, dop = gsa.dop) } }
     }
 
+    private val measurementsCallback = object : GnssMeasurementsEvent.Callback() {
+        override fun onGnssMeasurementsReceived(event: GnssMeasurementsEvent) = SignalStats.onMeasurements(event)
+        override fun onStatusChanged(status: Int) = SignalStats.onMeasurementsStatus(
+            when (status) {
+                STATUS_READY -> MeasurementsStatus.OK
+                STATUS_NOT_SUPPORTED -> MeasurementsStatus.NOT_SUPPORTED
+                STATUS_LOCATION_DISABLED -> MeasurementsStatus.LOCATION_DISABLED
+                else -> MeasurementsStatus.UNKNOWN
+            }
+        )
+    }
+
     @SuppressLint("MissingPermission") // Callers check ACCESS_FINE_LOCATION first.
     @Synchronized
     fun start(context: Context) {
         if (thread != null) return
-        TripStore.init(context)
-        synchronized(trip) { if (AppSettings.state.value.autoTrip) tripActive = true }
-        _state.update { it.copy(tripActive = tripActive) }
+        TripRecorder.init(context)
         PerformanceStore.init(context)
         TtffStore.init(context)
         val lm = context.applicationContext.getSystemService(LocationManager::class.java)
         val t = HandlerThread("gps").apply { start() }
-        val handler = Handler(t.looper)
+        val h = Handler(t.looper)
         try {
             // minTime 0: whatever rate the chip delivers (1 Hz on most phones, up to 10 Hz on some).
             lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0L, 0f, locationListener, t.looper)
-            lm.registerGnssStatusCallback(gnssCallback, handler)
+            lm.registerGnssStatusCallback(gnssCallback, h)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                lm.addNmeaListener({ r -> handler.post(r) }, nmeaListener)
+                lm.addNmeaListener({ r -> h.post(r) }, nmeaListener)
             } else {
                 @Suppress("DEPRECATION")
-                lm.addNmeaListener(nmeaListener, handler)
+                lm.addNmeaListener(nmeaListener, h)
             }
-            // Raw measurements (AGC, multipath, clock) are optional: many phones do not report them.
-            runCatching {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    lm.registerGnssMeasurementsCallback({ r -> handler.post(r) }, measurementsCallback)
-                } else {
-                    @Suppress("DEPRECATION")
-                    lm.registerGnssMeasurementsCallback(measurementsCallback, handler)
-                }
-            }.onFailure { Log.w(TAG, "raw measurements unavailable", it) }
         } catch (e: RuntimeException) {
             Log.e(TAG, "cannot start GPS", e)
             lm.removeUpdates(locationListener)
@@ -227,7 +173,9 @@ object GpsTracker {
             return
         }
         thread = t
+        handler = h
         manager = lm
+        updateMeasurementsRegistration()
         _state.update {
             it.copy(running = true, error = null, providerEnabled = lm.isProviderEnabled(LocationManager.GPS_PROVIDER))
         }
@@ -239,86 +187,46 @@ object GpsTracker {
         lm.removeUpdates(locationListener)
         lm.unregisterGnssStatusCallback(gnssCallback)
         lm.removeNmeaListener(nmeaListener)
-        runCatching { lm.unregisterGnssMeasurementsCallback(measurementsCallback) }
+        if (measurementsRegistered) runCatching { lm.unregisterGnssMeasurementsCallback(measurementsCallback) }
+        measurementsRegistered = false
         thread?.quitSafely()
         thread = null
+        handler = null
         manager = null
         _state.update { it.copy(running = false, satellites = emptyList(), fixType = FixType.NONE) }
     }
 
-    /** Starts recording a trip; it is saved to the history by [endTrip]. */
-    fun startTrip() {
-        synchronized(trip) {
-            trip.reset()
-            track.clear()
-            tripId = null
-            tripActive = true
-        }
-        synchronized(quality) { quality.clear() }
-        _state.update { it.copy(tripActive = true, trip = TripSnapshot(), track = emptyList(), quality = emptyList()) }
+    /** Screens showing raw-measurement data call this with true while visible and false after. */
+    @Synchronized
+    fun setMeasurementsWanted(wanted: Boolean) {
+        measurementsWanted = (measurementsWanted + if (wanted) 1 else -1).coerceAtLeast(0)
+        updateMeasurementsRegistration()
     }
 
-    /**
-     * Saves the current trip to the history. With automatic recording a new trip starts at once;
-     * otherwise nothing is recorded until the next [startTrip].
-     */
-    fun endTrip() {
-        val auto = AppSettings.state.value.autoTrip
-        synchronized(trip) {
-            tripId?.let { TripStore.endTrip(it, track.toList(), trip.current) }
-            trip.reset()
-            track.clear()
-            tripId = null
-            tripActive = auto
-        }
-        synchronized(quality) { quality.clear() }
-        _state.update { it.copy(tripActive = auto, trip = TripSnapshot(), track = emptyList(), quality = emptyList()) }
-    }
-
-    /** Starts the sky signal map and the receiver gain statistics afresh. */
-    fun resetSignalStats() {
-        synchronized(quality) {
-            skyMap.reset()
-            agc.reset()
-        }
-        _state.update { it.copy(skyMap = emptyList(), receiver = it.receiver.copy(agc = emptyList())) }
-    }
-
-    private fun onMeasurements(event: GnssMeasurementsEvent) {
-        val levels = ArrayList<Pair<String, Double>>()
-        if (Build.VERSION.SDK_INT >= 33) {
-            event.gnssAutomaticGainControls.forEach { levels += agcBandName(it.carrierFrequencyHz.toDouble()) to it.levelDb }
-        }
-        if (levels.isEmpty()) {
-            // Before Android 13 (and on some chips after it) the AGC level comes per measurement.
-            @Suppress("DEPRECATION")
-            for (m in event.measurements) {
-                if (m.hasAutomaticGainControlLevelDb() && m.hasCarrierFrequencyHz()) {
-                    levels += agcBandName(m.carrierFrequencyHz.toDouble()) to m.automaticGainControlLevelDb
+    @SuppressLint("MissingPermission")
+    private fun updateMeasurementsRegistration() {
+        val lm = manager ?: return
+        val h = handler ?: return
+        val want = measurementsWanted > 0
+        if (want == measurementsRegistered) return
+        if (want) {
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    lm.registerGnssMeasurementsCallback({ r -> h.post(r) }, measurementsCallback)
+                } else {
+                    @Suppress("DEPRECATION")
+                    lm.registerGnssMeasurementsCallback(measurementsCallback, h)
                 }
+                measurementsRegistered = true
+            }.onFailure {
+                Log.w(TAG, "raw measurements unavailable", it)
+                SignalStats.onMeasurementsStatus(MeasurementsStatus.NOT_SUPPORTED)
             }
-        }
-        val clock = event.clock
-        val bands = synchronized(quality) {
-            levels.groupBy({ it.first }, { it.second }).forEach { (band, v) -> agc.add(band, v.average()) }
-            agc.bands()
-        }
-        _state.update {
-            it.copy(
-                receiver = it.receiver.copy(
-                    measurements = MeasurementsStatus.OK,
-                    agc = bands,
-                    multipath = event.measurements.count { m -> m.multipathIndicator == GnssMeasurement.MULTIPATH_INDICATOR_DETECTED },
-                    measured = event.measurements.size,
-                    leapSeconds = if (clock.hasLeapSecond()) clock.leapSecond else it.receiver.leapSeconds,
-                    timeUncertaintyNs = if (clock.hasTimeUncertaintyNanos()) clock.timeUncertaintyNanos else null,
-                ),
-            )
+        } else {
+            runCatching { lm.unregisterGnssMeasurementsCallback(measurementsCallback) }
+            measurementsRegistered = false
         }
     }
-
-    /** Id of the trip in progress (its start time), or null before the first good fix. */
-    fun currentTripId(): Long? = synchronized(trip) { tripId }
 
     private fun onLocation(loc: Location) {
         val elapsedMs = loc.elapsedRealtimeNanos / 1_000_000
@@ -330,32 +238,11 @@ object GpsTracker {
             loc.hasAltitude() -> loc.altitude
             else -> null
         }
-        var recentCopy: List<TrackPoint>? = null
-        val active: Boolean
-        val (speed, snapshot, points) = synchronized(trip) {
-            val speed = live.speedOf(fix)
-            live.add(fix)
-            if (!tripActive && AppSettings.state.value.autoTrip) tripActive = true
-            active = tripActive
-            val snapshot = if (tripActive) trip.add(fix) else TripSnapshot()
-            // One point per second at most, and only usable positions.
-            val usable = (accuracy ?: Double.MAX_VALUE) <= TRACK_MAX_ACCURACY_M
-            val point = TrackPoint(loc.time, elapsedMs, loc.latitude, loc.longitude, altitude, speed, accuracy)
-            val lastRecent = recent.lastOrNull()
-            if (usable && (lastRecent == null || elapsedMs - lastRecent.elapsedMs >= 1000)) {
-                recent += point
-                while (recent.isNotEmpty() && loc.time - recent.first().utcMs > RECENT_MS) recent.removeAt(0)
-                recentCopy = recent.toList()
-            }
-            val last = track.lastOrNull()
-            val record = tripActive && usable && (last == null || elapsedMs - last.elapsedMs >= 1000)
-            if (record) {
-                val id = tripId ?: loc.time.also { tripId = it }
-                track += point
-                TripStore.append(id, point)
-            }
-            Triple(speed, snapshot, if (record) track.toList() else null)
+        val speed = synchronized(live) {
+            live.speedOf(fix).also { live.add(fix) }
         }
+        TripRecorder.onFix(fix, TrackPoint(loc.time, elapsedMs, loc.latitude, loc.longitude, altitude, speed, accuracy))
+
         val gpsFix = GpsFix(
             lat = loc.latitude,
             lon = loc.longitude,
@@ -368,9 +255,10 @@ object GpsTracker {
             elapsedMs = elapsedMs,
             utcMs = loc.time,
         )
-        // Acceleration timing uses the receiver's Doppler speed only: derived speeds lag.
+        // Acceleration timing uses the receiver's Doppler speed only: derived speeds lag. A unit
+        // change swaps the run set, but not in the middle of a run.
         val unit = AppSettings.state.value.unit
-        if (unit != meterUnit) {
+        if (unit != meterUnit && meter.status !is MeterStatus.Running) {
             meterUnit = unit
             meter = PerformanceMeter(Runs.forUnit(unit))
         }
@@ -382,9 +270,7 @@ object GpsTracker {
         val offset = clockOffsetMs(loc.time, loc.elapsedRealtimeNanos, System.currentTimeMillis(), SystemClock.elapsedRealtimeNanos())
         _state.update {
             it.copy(
-                receiver = it.receiver.copy(clockOffsetMs = offset),
-                fix = gpsFix, trip = snapshot, track = points ?: it.track, providerEnabled = true,
-                tripActive = active, recent = recentCopy ?: it.recent,
+                fix = gpsFix, providerEnabled = true, clockOffsetMs = offset,
                 meter = meter.status, updateHz = hz,
                 lastRun = runs.lastOrNull() ?: it.lastRun,
                 lastRunElapsedMs = if (runs.isNotEmpty()) elapsedMs else it.lastRunElapsedMs,

@@ -98,7 +98,9 @@ Listing texts, policy form answers and graphics: [docs/play-store.md](docs/play-
 
 ```
 app/src/main/java/io/github/swidegit/gpscam/
-    GpsTracker.kt        raw GPS: location, GnssStatus, NMEA (GSA) -> StateFlow<GpsState>
+    GpsTracker.kt        raw GPS: location, GnssStatus, NMEA (GSA), raw measurements on demand -> StateFlow<GpsState>
+    TripRecorder.kt      the trip in progress: statistics, persisted track, last hour of points (own flows)
+    SignalStats.kt       sky signal map, quality samples, receiver (AGC, multipath, clock) (own flows)
     TripStats.kt         distance, max (spike filter), average, moving time (pure, unit-tested)
     Track.kt             track points, GPX / CSV / storage formats (pure, unit-tested)
     TripStore.kt         trip history in private storage, exports to Documents/GPSCam

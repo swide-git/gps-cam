@@ -18,7 +18,6 @@ import androidx.camera.camera2.interop.Camera2CameraControl
 import androidx.camera.camera2.interop.CaptureRequestOptions
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import android.graphics.Bitmap
-import android.graphics.Matrix
 import android.util.Size
 import android.view.Surface
 import androidx.camera.core.Camera
@@ -251,7 +250,7 @@ class CameraSession(private val context: Context) {
             try {
                 val canvas = frame.overlayCanvas
                 canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
-                renderer.draw(canvas, frame.size.width, frame.size.height, frame.rotationDegrees, GpsTracker.state.value, AppSettings.state.value)
+                renderer.draw(canvas, frame.size.width, frame.size.height, frame.rotationDegrees, GpsTracker.state.value, TripRecorder.state.value, TripRecorder.recent.value, AppSettings.state.value)
             } catch (e: Throwable) {
                 if (!overlayErrorLogged) Log.e(TAG, "overlay drawing failed", e)
                 overlayErrorLogged = true
@@ -280,13 +279,15 @@ class CameraSession(private val context: Context) {
     fun takePhoto() {
         val still = imageCapture ?: return
         val gps = GpsTracker.state.value
+        val trip = TripRecorder.state.value
+        val recent = TripRecorder.recent.value
         val settings = AppSettings.state.value
         still.takePicture(context.mainExecutor, object : ImageCapture.OnImageCapturedCallback() {
             override fun onCaptureSuccess(image: ImageProxy) {
                 val rotationDegrees = image.imageInfo.rotationDegrees
                 val raw = try { image.toBitmap() } finally { image.close() }
                 telemetryHandler.post {
-                    _photo.value = runCatching { savePhoto(raw, rotationDegrees, gps, settings) }
+                    _photo.value = runCatching { savePhoto(raw, rotationDegrees, gps, trip, recent, settings) }
                         .onFailure { Log.e(TAG, "photo failed", it) }
                         .getOrElse { "error: ${describe(it)}" }
                 }
@@ -299,12 +300,19 @@ class CameraSession(private val context: Context) {
         })
     }
 
-    private fun savePhoto(raw: Bitmap, rotationDegrees: Int, gps: GpsState, settings: Settings): String {
-        val upright = if (rotationDegrees == 0) raw else
-            Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, Matrix().apply { postRotate(rotationDegrees.toFloat()) }, true)
-                .also { if (it !== raw) raw.recycle() }
-        val bitmap = if (upright.isMutable) upright else upright.copy(Bitmap.Config.ARGB_8888, true).also { upright.recycle() }
-        photoRenderer.draw(android.graphics.Canvas(bitmap), bitmap.width, bitmap.height, 0, gps, settings)
+    private fun savePhoto(raw: Bitmap, rotationDegrees: Int, gps: GpsState, trip: TripState, recent: List<TrackPoint>, settings: Settings): String {
+        // One mutable output bitmap: the frame is rotated into it and the box drawn on top (a 4K
+        // frame is 33 MB, so no second copy for the rotation and a third for mutability).
+        val sideways = rotationDegrees % 180 != 0
+        val bitmap = Bitmap.createBitmap(if (sideways) raw.height else raw.width, if (sideways) raw.width else raw.height, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        canvas.save()
+        canvas.translate(bitmap.width / 2f, bitmap.height / 2f)
+        canvas.rotate(rotationDegrees.toFloat())
+        canvas.drawBitmap(raw, -raw.width / 2f, -raw.height / 2f, null)
+        canvas.restore()
+        raw.recycle()
+        photoRenderer.draw(canvas, bitmap.width, bitmap.height, 0, gps, trip, recent, settings)
         val name = "GPSCam_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) + ".jpg"
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, name)
