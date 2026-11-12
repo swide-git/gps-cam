@@ -4,7 +4,9 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.content.res.Configuration
 import android.os.Bundle
+import android.view.KeyEvent
 import android.provider.Settings as SystemSettings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -22,6 +24,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -39,6 +42,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -54,6 +59,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -89,6 +95,8 @@ class MainActivity : ComponentActivity() {
         super.onStop()
         GpsTracker.stop()
     }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean = VolumeKeys.onKey(event) || super.dispatchKeyEvent(event)
 
     private fun refreshPermission() {
         hasLocation = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -140,9 +148,12 @@ private fun App(hasLocation: Boolean, requestLocation: () -> Unit) {
         return
     }
 
+    // Landscape: a navigation rail on the side instead of the top and bottom bars, so the speed
+    // and the camera preview get the full height.
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     Scaffold(
         topBar = {
-            if (tab != Tab.CAMERA) {
+            if (tab != Tab.CAMERA && !landscape) {
                 TopAppBar(
                     title = { Text("GPS Cam", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold) },
                     actions = {
@@ -158,7 +169,7 @@ private fun App(hasLocation: Boolean, requestLocation: () -> Unit) {
             }
         },
         bottomBar = {
-            NavigationBar {
+            if (!landscape) NavigationBar {
                 Tab.entries.forEach { t ->
                     NavigationBarItem(
                         selected = tab == t,
@@ -170,13 +181,35 @@ private fun App(hasLocation: Boolean, requestLocation: () -> Unit) {
             }
         },
     ) { padding ->
-        val modifier = Modifier.padding(padding).fillMaxSize()
-        when {
-            !hasLocation -> LocationPermissionScreen(modifier, requestLocation)
-            tab == Tab.SPEED -> SpeedScreen(gps, settings, modifier)
-            tab == Tab.SATELLITES -> SatellitesScreen(gps, modifier)
-            tab == Tab.CAMERA -> CameraScreen(modifier, onOpenSettings = { showSettings = true })
-            tab == Tab.TRIPS -> TripsScreen(gps, settings, modifier)
+        Row(Modifier.padding(padding).fillMaxSize()) {
+            if (landscape) {
+                NavigationRail(
+                    header = {
+                        IconButton(onClick = { showSettings = true }) {
+                            Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings))
+                        }
+                    },
+                ) {
+                    Spacer(Modifier.weight(1f))
+                    Tab.entries.forEach { t ->
+                        NavigationRailItem(
+                            selected = tab == t,
+                            onClick = { tab = t },
+                            icon = { Icon(t.icon, contentDescription = null) },
+                            label = { Text(stringResource(t.label)) },
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+            val modifier = Modifier.weight(1f).fillMaxHeight()
+            when {
+                !hasLocation -> LocationPermissionScreen(modifier, requestLocation)
+                tab == Tab.SPEED -> SpeedScreen(gps, settings, modifier)
+                tab == Tab.SATELLITES -> SatellitesScreen(gps, modifier)
+                tab == Tab.CAMERA -> CameraScreen(modifier, onOpenSettings = { showSettings = true })
+                tab == Tab.TRIPS -> TripsScreen(gps, settings, modifier)
+            }
         }
     }
 }
@@ -224,6 +257,9 @@ private fun SettingsScreen(settings: Settings, modifier: Modifier) {
                 AppSettings.update { it.copy(landscapeFocus = v) }
             }
             SettingSwitch(R.string.settings_audio, null, settings.recordAudio) { v -> AppSettings.update { it.copy(recordAudio = v) } }
+            SettingSwitch(R.string.settings_volume_keys, R.string.settings_volume_keys_hint, settings.volumeKeys) { v ->
+                AppSettings.update { it.copy(volumeKeys = v) }
+            }
         }
         SettingsCard(R.string.settings_overlay) {
             SubLabel(R.string.settings_overlay_position)
@@ -232,8 +268,20 @@ private fun SettingsScreen(settings: Settings, modifier: Modifier) {
             ChoiceRow(OverlaySize.entries, settings.overlaySize, { it.label }) { z -> AppSettings.update { it.copy(overlaySize = z) } }
             SubLabel(R.string.settings_overlay_opacity)
             ChoiceRow(listOf(0, 30, 60, 85), settings.overlayOpacity, { "$it%" }) { o -> AppSettings.update { it.copy(overlayOpacity = o) } }
+            SettingSwitch(R.string.settings_overlay_chart, R.string.settings_overlay_chart_hint, settings.overlayChart) { v ->
+                AppSettings.update { it.copy(overlayChart = v) }
+            }
             SettingSwitch(R.string.settings_overlay_sats, null, settings.overlaySatellites) { v ->
                 AppSettings.update { it.copy(overlaySatellites = v) }
+            }
+            SettingSwitch(R.string.settings_overlay_altitude, null, settings.overlayAltitude) { v ->
+                AppSettings.update { it.copy(overlayAltitude = v) }
+            }
+            SettingSwitch(R.string.settings_overlay_heading, null, settings.overlayHeading) { v ->
+                AppSettings.update { it.copy(overlayHeading = v) }
+            }
+            SettingSwitch(R.string.settings_overlay_distance, null, settings.overlayDistance) { v ->
+                AppSettings.update { it.copy(overlayDistance = v) }
             }
             SettingSwitch(R.string.settings_overlay_coords, R.string.settings_overlay_coords_hint, settings.overlayCoordinates) { v ->
                 AppSettings.update { it.copy(overlayCoordinates = v) }

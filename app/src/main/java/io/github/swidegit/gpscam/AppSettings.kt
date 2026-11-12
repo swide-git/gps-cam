@@ -18,6 +18,13 @@ data class Settings(
     val recordAudio: Boolean = true,
     val overlayCoordinates: Boolean = true,
     val overlaySatellites: Boolean = true,
+    val overlayAltitude: Boolean = true,
+    val overlayHeading: Boolean = false,
+    val overlayDistance: Boolean = false,
+    /** Speed of the last minute as a small line chart in the overlay. */
+    val overlayChart: Boolean = true,
+    /** Volume up starts and stops recording, volume down takes a photo, on the Camera tab. */
+    val volumeKeys: Boolean = true,
     val overlayCorner: OverlayCorner = OverlayCorner.BOTTOM_LEFT,
     val overlaySize: OverlaySize = OverlaySize.MEDIUM,
     /** Opacity of the box behind the overlay text, 0-100. */
@@ -49,6 +56,11 @@ object AppSettings {
             recordAudio = p.getBoolean("recordAudio", d.recordAudio),
             overlayCoordinates = p.getBoolean("overlayCoordinates", d.overlayCoordinates),
             overlaySatellites = p.getBoolean("overlaySatellites", d.overlaySatellites),
+            overlayAltitude = p.getBoolean("overlayAltitude", d.overlayAltitude),
+            overlayHeading = p.getBoolean("overlayHeading", d.overlayHeading),
+            overlayDistance = p.getBoolean("overlayDistance", d.overlayDistance),
+            overlayChart = p.getBoolean("overlayChart", d.overlayChart),
+            volumeKeys = p.getBoolean("volumeKeys", d.volumeKeys),
             overlayCorner = p.enum("overlayCorner", d.overlayCorner),
             overlaySize = p.enum("overlaySize", d.overlaySize),
             overlayOpacity = p.getInt("overlayOpacity", d.overlayOpacity),
@@ -67,6 +79,11 @@ object AppSettings {
             ?.putBoolean("recordAudio", s.recordAudio)
             ?.putBoolean("overlayCoordinates", s.overlayCoordinates)
             ?.putBoolean("overlaySatellites", s.overlaySatellites)
+            ?.putBoolean("overlayAltitude", s.overlayAltitude)
+            ?.putBoolean("overlayHeading", s.overlayHeading)
+            ?.putBoolean("overlayDistance", s.overlayDistance)
+            ?.putBoolean("overlayChart", s.overlayChart)
+            ?.putBoolean("volumeKeys", s.volumeKeys)
             ?.putString("overlayCorner", s.overlayCorner.name)
             ?.putString("overlaySize", s.overlaySize.name)
             ?.putInt("overlayOpacity", s.overlayOpacity)

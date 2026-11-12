@@ -3,6 +3,7 @@ package io.github.swidegit.gpscam
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.os.SystemClock
@@ -26,6 +27,16 @@ class OverlayRenderer {
     private val small = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         typeface = Typeface.MONOSPACE
+    }
+    private val chartLine = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(255, 159, 28)
+        style = Paint.Style.STROKE
+        strokeJoin = Paint.Join.ROUND
+        strokeCap = Paint.Cap.ROUND
+    }
+    private val chartBase = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(110, 255, 255, 255)
+        style = Paint.Style.STROKE
     }
     private val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
 
@@ -72,8 +83,13 @@ class OverlayRenderer {
             if (!fresh) parts += if (fix == null) "NO FIX" else "FIX ${(now - fix.elapsedMs) / 1000} s"
             add(parts.joinToString("  "))
             val clock = time.format(Date(fix?.utcMs ?: System.currentTimeMillis()))
-            val alt = fix?.altitudeM?.let { "  ALT ${it.toInt()} m" } ?: ""
+            val alt = fix?.altitudeM?.takeIf { settings.overlayAltitude }?.let { "  ALT ${it.toInt()} m" } ?: ""
             add(clock + alt)
+            val extra = buildList {
+                if (settings.overlayHeading) fix?.bearingDeg?.let { add(String.format(Locale.US, "HDG %03.0f° %s", it, Format.compassPoint(it))) }
+                if (settings.overlayDistance) add("DIST ${Format.distance(gps.trip.distanceM, unit)}")
+            }
+            if (extra.isNotEmpty()) add(extra.joinToString("  "))
             if (settings.overlayCoordinates && fix != null) add(Format.coordinates(fix.lat, fix.lon))
             // Acceleration timing: live while a run is on, the result for a while after it.
             val meter = gps.meter
@@ -93,7 +109,10 @@ class OverlayRenderer {
             return drawUpright(canvas, w, h, gps, settings, (w - margin * 4) / (boxWidth - margin * 2))
         }
         val bigAscent = -big.ascent()
-        val boxHeight = bigAscent + big.descent() * 0.4f + lines.size * lineHeight + margin * 1.4f
+        // Mini chart of the last minute under the speed, as wide as the text.
+        val chart = if (settings.overlayChart) recentSpeeds(gps, unit) else emptyList()
+        val chartHeight = if (chart.size >= 2) small.textSize * 2.4f else 0f
+        val boxHeight = bigAscent + big.descent() * 0.4f + chartHeight + lines.size * lineHeight + margin * 1.4f
         val left = when (settings.overlayCorner) {
             OverlayCorner.BOTTOM_LEFT, OverlayCorner.TOP_LEFT -> margin
             else -> w - margin - boxWidth
@@ -108,13 +127,47 @@ class OverlayRenderer {
         canvas.drawText(speedText, left + margin, y, big)
         canvas.drawText(unit.label, left + margin + big.measureText(speedText) + margin * 0.4f, y, unitPaint)
         y += big.descent() * 0.4f
+        if (chartHeight > 0f) {
+            drawChart(canvas, chart, left + margin, y + chartHeight * 0.2f, boxWidth - margin * 2, chartHeight * 0.75f)
+            y += chartHeight
+        }
         for (line in lines) {
             y += lineHeight
             canvas.drawText(line, left + margin, y - small.descent(), small)
         }
     }
 
+    /** (seconds before now, speed in [unit]) for the last [CHART_WINDOW_MS] of the track. */
+    private fun recentSpeeds(gps: GpsState, unit: SpeedUnit): List<Pair<Float, Float>> {
+        val track = gps.track
+        val end = track.lastOrNull()?.utcMs ?: return emptyList()
+        val out = ArrayList<Pair<Float, Float>>()
+        for (i in track.indices.reversed()) {
+            val p = track[i]
+            if (end - p.utcMs > CHART_WINDOW_MS) break
+            val v = p.speedMs ?: continue
+            out += ((end - p.utcMs) / 1000f) to unit.fromMetresPerSecond(v).toFloat()
+        }
+        return out
+    }
+
+    private fun drawChart(canvas: Canvas, samples: List<Pair<Float, Float>>, x: Float, y: Float, width: Float, height: Float) {
+        val top = niceAxisMax(samples.maxOf { it.second }.toDouble()).toFloat()
+        val window = CHART_WINDOW_MS / 1000f
+        chartLine.strokeWidth = height * 0.06f
+        chartBase.strokeWidth = height * 0.03f
+        canvas.drawLine(x, y + height, x + width, y + height, chartBase)
+        val path = Path()
+        samples.forEachIndexed { i, (ago, v) ->
+            val px = x + width * (1f - ago / window)
+            val py = y + height * (1f - v / top)
+            if (i == 0) path.moveTo(px, py) else path.lineTo(px, py)
+        }
+        canvas.drawPath(path, chartLine)
+    }
+
     companion object {
+        const val CHART_WINDOW_MS = 60_000L
         /** Long side over short side of the recorded video (Quality.FHD and its fallbacks are 16:9). */
         const val VIDEO_ASPECT = 16f / 9f
         /** How long a finished acceleration run stays in the video. */

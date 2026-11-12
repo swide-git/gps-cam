@@ -56,7 +56,10 @@ CAMERA
 • 720p, 1080p or 4K at 30 or 60 fps, stabilisation where available
 • Zoom, including the ultra-wide lens, pinch to zoom and tap to focus
 • Landscape focus: focus fixed at infinity, so autofocus does not lock onto a train window
-• Choose the corner, size and opacity of the overlay
+• Choose the corner, size and opacity of the overlay, and what it shows: heading, trip distance, altitude, a one-minute speed chart
+• Photos with the same overlay, up to 4K
+• Volume keys as a shutter: volume up records, volume down takes a photo
+• Landscape layout with the controls beside the picture
 • A telemetry subtitle file (.srt) is saved with every video
 
 PRIVACY
@@ -70,10 +73,10 @@ Tip for trains: hold the phone against the window. Coated glass and the metal bo
 
 ```
 <en-US>
-- Acceleration timer: 0-100 and 100-200 km/h (0-60 and 60-130 mph) and the quarter mile, with last and best times and the result in your video
-- Trip details: speed and altitude charts for every saved trip
-- Camera buttons moved below the preview, so they no longer hide the overlay
-- Fixed: the camera could close the app on some phones
+- Photos with the speed overlay, up to 4K
+- Volume keys as a shutter: up records, down takes a photo
+- Landscape layout: big speed beside the stats, camera controls on the side
+- Overlay: optional heading, trip distance, altitude and a one-minute speed chart
 </en-US>
 ```
 

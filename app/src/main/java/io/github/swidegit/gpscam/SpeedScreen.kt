@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -72,6 +74,74 @@ fun FixBadge(gps: GpsState, now: Long) {
 
 @Composable
 fun SpeedScreen(gps: GpsState, settings: Settings, modifier: Modifier) {
+    BoxWithConstraints(modifier) {
+        // Landscape on a phone: big number beside the tiles, everything on one screen.
+        if (maxWidth > maxHeight && maxHeight < 600.dp) LandscapeSpeed(gps, settings, Modifier.fillMaxSize())
+        else PortraitSpeed(gps, settings, Modifier.fillMaxSize())
+    }
+}
+
+@Composable
+private fun LandscapeSpeed(gps: GpsState, settings: Settings, modifier: Modifier) {
+    val now = rememberNow()
+    val unit = settings.unit
+    val fix = gps.fix
+    val fresh = gps.isFresh(now)
+    val trip = gps.trip
+    Row(modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        val onHero = MaterialTheme.colorScheme.onPrimaryContainer
+        Column(
+            Modifier.weight(1.4f).fillMaxHeight()
+                .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(28.dp))
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            FixBadge(gps, now)
+            BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                val size = minOf(maxWidth.value * 0.42f, maxHeight.value * 0.8f)
+                Text(
+                    fix?.speedMs?.let { Format.speed(it, unit) } ?: "--",
+                    fontSize = size.sp,
+                    lineHeight = size.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (fresh) onHero else onHero.copy(alpha = 0.45f),
+                    maxLines = 1,
+                )
+            }
+            Text(
+                unit.label,
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clip(RoundedCornerShape(12.dp))
+                    .clickable { AppSettings.update { it.copy(unit = unit.next()) } }
+                    .padding(horizontal = 12.dp, vertical = 2.dp),
+            )
+            if (!fresh) gps.fixAgeMs(now)?.let { Text(stringResource(R.string.fix_age, it / 1000), color = onHero, fontWeight = FontWeight.SemiBold) }
+        }
+        Column(
+            Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+        ) {
+            TileRow(
+                Tile(stringResource(R.string.stat_max), "${Format.speed(trip.maxSpeedMs, unit)} ${unit.label}"),
+                Tile(stringResource(R.string.stat_avg), "${Format.speed(trip.averageMovingSpeedMs, unit)} ${unit.label}"),
+            )
+            TileRow(
+                Tile(stringResource(R.string.stat_distance), Format.distance(trip.distanceM, unit)),
+                Tile(stringResource(R.string.stat_moving_time), Format.duration(trip.movingTimeMs)),
+            )
+            TileRow(
+                Tile(stringResource(R.string.stat_altitude), fix?.altitudeM?.let { "${it.toInt()} m" } ?: "--"),
+                Tile(stringResource(R.string.stat_heading), fix?.bearingDeg?.let { String.format(Locale.US, "%.0f° %s", it, Format.compassPoint(it)) } ?: "--"),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PortraitSpeed(gps: GpsState, settings: Settings, modifier: Modifier) {
     val now = rememberNow()
     val unit = settings.unit
     val fix = gps.fix

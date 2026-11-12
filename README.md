@@ -37,8 +37,13 @@ speed stays accurate at any speed the receiver can track.
   stabilisation where supported, zoom presets (0.5x on phones with an ultra-wide lens, 1x, 2x, 5x)
   and pinch to zoom, tap to focus, and "landscape focus" fixed at infinity so autofocus does not
   lock onto a train window. The telemetry box (speed, max, satellites, accuracy, time, optionally
-  coordinates) is drawn into each frame with a CameraX `OverlayEffect`, so the preview shows
-  exactly what the video contains; its corner, size and background opacity are configurable. Videos go to
+  coordinates; optionally heading, trip distance and a one-minute speed chart) is drawn into each
+  frame with a CameraX `OverlayEffect`, so the preview shows exactly what the video contains; its
+  corner, size and background opacity are configurable. Controls sit beside or below the preview,
+  never on it. Photos (up to 4K, 16:9) get the same box and go to `Pictures/GPSCam`. Volume up
+  starts or stops recording, volume down takes a photo.
+- **Landscape**: a navigation rail replaces the bars; the Speed screen shows the big number beside
+  the tiles, and the camera puts its controls on the side. Videos go to
   `Movies/GPSCam`; a per-second telemetry subtitle file (`.srt`) goes to `Documents/GPSCam`.
 
 Nothing leaves the phone: no internet permission, no accounts, no analytics.
