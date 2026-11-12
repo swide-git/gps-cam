@@ -192,6 +192,12 @@ private fun TripDetail(
                 stringResource(R.string.trip_altitude_range) to
                     if (altitudes.isEmpty()) "--" else "${altitudes.min().toInt()}–${altitudes.max().toInt()} m",
             )
+            val accuracies = track.mapNotNull { it.accuracyM }
+            DetailTiles(
+                stringResource(R.string.trip_longest_gap) to Format.duration(longestTrackGapMs(track)),
+                stringResource(R.string.quality_accuracy) to
+                    if (accuracies.isEmpty()) "--" else String.format(java.util.Locale.US, "±%.1f m", accuracies.average()),
+            )
             SpeedChart(track, unit, Modifier.fillMaxWidth(), showRanges = false)
             if (altitudes.size >= 2) {
                 TrackChart(stringResource(R.string.stat_altitude), track, "m", { it.altitudeM }, fromZero = false, showRanges = false, modifier = Modifier.fillMaxWidth())

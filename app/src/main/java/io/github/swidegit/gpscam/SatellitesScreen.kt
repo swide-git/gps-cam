@@ -3,6 +3,14 @@ package io.github.swidegit.gpscam
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -47,8 +55,36 @@ private fun signalColor(cn0: Float): Color = when {
     else -> Palette.badgeBad
 }
 
+private enum class SatView(val label: Int) { NOW(R.string.view_now), SKY(R.string.view_sky), HISTORY(R.string.view_history), RECEIVER(R.string.view_receiver) }
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SatellitesScreen(gps: GpsState, modifier: Modifier) {
+    var view by rememberSaveable { mutableStateOf(SatView.NOW) }
+    Column(modifier) {
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+            SatView.entries.forEachIndexed { i, v ->
+                SegmentedButton(
+                    selected = view == v,
+                    onClick = { view = v },
+                    shape = SegmentedButtonDefaults.itemShape(i, SatView.entries.size),
+                    icon = {},
+                    label = { Text(stringResource(v.label), maxLines = 1) },
+                )
+            }
+        }
+        val content = Modifier.fillMaxWidth().weight(1f)
+        when (view) {
+            SatView.NOW -> SatellitesNow(gps, content)
+            SatView.SKY -> SkyMapSection(gps, content)
+            SatView.HISTORY -> HistorySection(gps, content)
+            SatView.RECEIVER -> ReceiverSection(gps, content)
+        }
+    }
+}
+
+@Composable
+private fun SatellitesNow(gps: GpsState, modifier: Modifier) {
     val now = rememberNow()
     val sats = gps.satellites.sortedWith(compareByDescending<Satellite> { it.usedInFix }.thenByDescending { it.cn0DbHz })
     LazyColumn(modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -68,6 +104,7 @@ fun SatellitesScreen(gps: GpsState, modifier: Modifier) {
         if (sats.isEmpty()) {
             item { Text(stringResource(R.string.sats_none), color = Palette.muted, modifier = Modifier.padding(16.dp)) }
         }
+        if (sats.isNotEmpty()) item { Column(Modifier.padding(vertical = 8.dp)) { BandStatsCard(sats) } }
         items(sats, key = { "${it.constellation}-${it.svid}-${it.carrierHz}" }) { SatelliteRow(it) }
         item { Spacer(Modifier.height(16.dp)) }
     }

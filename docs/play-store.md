@@ -49,7 +49,10 @@ TRIPS
 SATELLITES
 • Sky plot and signal strength of every satellite
 • GPS, GLONASS, Galileo, BeiDou, QZSS, NavIC and SBAS
-• Frequency bands (L1, L5 and others), satellites used in the fix, time to first fix, dilution of precision
+• Frequency bands (L1, L5 and others) with a dual-frequency indicator, satellites used in the fix, dilution of precision
+• Signal map of the sky: see which side of the train gets the signal
+• Charts of satellites, signal and accuracy over the trip, a trip quality summary and the time-to-first-fix history
+• Interference check from raw GNSS measurements (receiver gain, reflections), and the phone clock compared with GPS time
 
 CAMERA
 • Video with speed, maximum speed, satellites, time and optionally coordinates drawn into the picture; the preview shows exactly what you record
@@ -73,10 +76,11 @@ Tip for trains: hold the phone against the window. Coated glass and the metal bo
 
 ```
 <en-US>
-- Photos with the speed overlay, up to 4K
-- Volume keys as a shutter: up records, down takes a photo
-- Landscape layout: big speed beside the stats, camera controls on the side
-- Overlay: optional heading, trip distance, altitude and a one-minute speed chart
+- Satellites: new Sky map, History and Receiver views
+- Sky map: average signal from each direction, to find the best seat by the window
+- History: satellites, signal and accuracy over the trip, quality summary, time-to-first-fix history
+- Receiver: interference check (receiver gain, reflections) and phone clock vs GPS time
+- Systems and bands table with a dual-frequency (L1 + L5) indicator
 </en-US>
 ```
 

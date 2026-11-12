@@ -32,7 +32,16 @@ speed stays accurate at any speed the receiver can track.
   as GPX or CSV to `Documents/GPSCam` and shared, e.g. to view the route in Google Earth or Strava. GPS runs only while the app is on screen: no background work, no notification.
 - **Satellites**: sky plot, per-satellite C/N0 signal bars, constellation (GPS, GLONASS, Galileo,
   BeiDou, QZSS, NavIC, SBAS), band (L1/E1/B1, L5/E5a/B2a, ...), used-in-fix, time to first fix,
-  PDOP/HDOP/VDOP from NMEA.
+  PDOP/HDOP/VDOP from NMEA. Four views:
+  - *Now*: sky plot, signal bars, and a table per system and band with a dual-frequency (L1 + L5)
+    indicator.
+  - *Sky map*: average signal per direction of the sky since the last reset, which shows the side
+    and height the signal gets in through a train window.
+  - *History*: satellites, top-4 signal and accuracy over the trip, a quality summary (time with a
+    3D fix, longest gap, averages) and the time-to-first-fix history.
+  - *Receiver*: receiver gain (AGC) per band from raw GNSS measurements with an interference
+    warning, multipath-flagged signals, the phone clock offset from GPS time, GPS time uncertainty
+    and leap seconds.
 - **Camera**: back camera, 720p / 1080p / 4K at 30 or 60 fps (falling back when the phone cannot),
   stabilisation where supported, zoom presets (0.5x on phones with an ultra-wide lens, 1x, 2x, 5x)
   and pinch to zoom, tap to focus, and "landscape focus" fixed at infinity so autofocus does not

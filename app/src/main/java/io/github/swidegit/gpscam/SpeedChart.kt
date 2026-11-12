@@ -75,6 +75,19 @@ fun TrackChart(
     fromZero: Boolean,
     showRanges: Boolean,
     modifier: Modifier = Modifier,
+) = TimeChart(title, track, { it.utcMs }, valueOf, unitLabel, fromZero, showRanges, modifier)
+
+/** Any value over real time: track points, receiver quality samples. */
+@Composable
+fun <T> TimeChart(
+    title: String,
+    items: List<T>,
+    timeOf: (T) -> Long,
+    valueOf: (T) -> Double?,
+    unitLabel: String,
+    fromZero: Boolean,
+    showRanges: Boolean,
+    modifier: Modifier = Modifier,
 ) {
     var range by rememberSaveable { mutableStateOf(if (showRanges) ChartRange.TEN_MIN else ChartRange.ALL) }
     val measurer = rememberTextMeasurer()
@@ -92,10 +105,10 @@ fun TrackChart(
                 }
             }
         }
-        val end = track.lastOrNull()?.utcMs ?: 0L
-        val windowMs = range.ms ?: (end - (track.firstOrNull()?.utcMs ?: end)).coerceAtLeast(60_000L)
+        val end = items.lastOrNull()?.let(timeOf) ?: 0L
+        val windowMs = range.ms ?: (end - (items.firstOrNull()?.let(timeOf) ?: end)).coerceAtLeast(60_000L)
         val start = end - windowMs
-        val visible = track.filter { it.utcMs >= start && valueOf(it) != null }
+        val visible = items.filter { timeOf(it) >= start && valueOf(it) != null }
         // At most ~600 vertices: enough for a phone width, cheap to redraw every second.
         val stride = (visible.size / 600).coerceAtLeast(1)
         val samples = visible.filterIndexed { i, _ -> i % stride == 0 || i == visible.lastIndex }
@@ -127,13 +140,14 @@ fun TrackChart(
             drawText(unitText, topLeft = Offset(size.width - unitText.size.width, size.height - unitText.size.height))
             if (samples.size < 2) return@Canvas
             val path = Path()
-            var previous: TrackPoint? = null
+            var previous: Long? = null
             samples.forEachIndexed { i, pt ->
-                val x = labelWidth + plotW * ((pt.utcMs - start).toFloat() / windowMs)
+                val t = timeOf(pt)
+                val x = labelWidth + plotW * ((t - start).toFloat() / windowMs)
                 val y = plotH - plotH * ((values[i] - axisMin) / span).toFloat()
                 // Break the line across gaps longer than 10 s (tunnels, app in the background).
-                if (previous == null || pt.utcMs - previous!!.utcMs > 10_000) path.moveTo(x, y) else path.lineTo(x, y)
-                previous = pt
+                if (previous == null || t - previous!! > 10_000) path.moveTo(x, y) else path.lineTo(x, y)
+                previous = t
             }
             drawPath(path, lineColor, style = Stroke(2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
         }
