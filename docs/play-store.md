@@ -44,7 +44,7 @@ ACCELERATION
 TRIPS
 • Maximum and average moving speed, distance, moving time and trip time
 • GPS glitches are ignored: the maximum needs a good fix, a confident speed and an acceleration a vehicle can actually reach
-• Save trips to the history, see each trip's speed and altitude charts, and export them as GPX or CSV, for example to see the route in Google Earth
+• Start and end trips yourself (or record them automatically), see each trip's speed and altitude charts, and export them as GPX or CSV, for example to see the route in Google Earth
 
 SATELLITES
 • Sky plot and signal strength of every satellite

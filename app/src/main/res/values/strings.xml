@@ -24,7 +24,11 @@
     <string name="stat_ttff">First fix</string>
     <string name="stat_position">Position</string>
     <string name="end_trip">End trip</string>
-    <string name="end_trip_hint">Saves the trip to Trips and starts a new one.</string>
+    <string name="end_trip_hint">Saves the trip to Trips.</string>
+    <string name="start_trip">Start trip</string>
+    <string name="trip_idle">No trip is being recorded. Speed and charts work without one; statistics, the track and the history need a trip.</string>
+    <string name="settings_auto_trip">Record trips automatically</string>
+    <string name="settings_auto_trip_hint">Start a trip with the first GPS fix, and a new one after each End trip. Off: trips only after Start trip.</string>
     <string name="chart_title">Speed</string>
     <string name="tab_trips">Trips</string>
     <string name="trip_current">Current trip</string>

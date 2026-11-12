@@ -25,6 +25,8 @@ data class Settings(
     val overlayChart: Boolean = true,
     /** Volume up starts and stops recording, volume down takes a photo, on the Camera tab. */
     val volumeKeys: Boolean = true,
+    /** Record a trip from the first fix without pressing Start trip. Off: trips only on request. */
+    val autoTrip: Boolean = false,
     val overlayCorner: OverlayCorner = OverlayCorner.BOTTOM_LEFT,
     val overlaySize: OverlaySize = OverlaySize.MEDIUM,
     /** Opacity of the box behind the overlay text, 0-100. */
@@ -61,6 +63,7 @@ object AppSettings {
             overlayDistance = p.getBoolean("overlayDistance", d.overlayDistance),
             overlayChart = p.getBoolean("overlayChart", d.overlayChart),
             volumeKeys = p.getBoolean("volumeKeys", d.volumeKeys),
+            autoTrip = p.getBoolean("autoTrip", d.autoTrip),
             overlayCorner = p.enum("overlayCorner", d.overlayCorner),
             overlaySize = p.enum("overlaySize", d.overlaySize),
             overlayOpacity = p.getInt("overlayOpacity", d.overlayOpacity),
@@ -84,6 +87,7 @@ object AppSettings {
             ?.putBoolean("overlayDistance", s.overlayDistance)
             ?.putBoolean("overlayChart", s.overlayChart)
             ?.putBoolean("volumeKeys", s.volumeKeys)
+            ?.putBoolean("autoTrip", s.autoTrip)
             ?.putString("overlayCorner", s.overlayCorner.name)
             ?.putString("overlaySize", s.overlaySize.name)
             ?.putInt("overlayOpacity", s.overlayOpacity)

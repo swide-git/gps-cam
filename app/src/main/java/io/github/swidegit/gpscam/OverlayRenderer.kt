@@ -77,17 +77,19 @@ class OverlayRenderer {
         big.alpha = if (fresh) 255 else 110
 
         val lines = buildList {
-            val parts = mutableListOf("MAX ${Format.speed(gps.trip.maxSpeedMs, unit)}")
+            // Maximum and distance belong to a trip; without one the box shows live values only.
+            val parts = mutableListOf<String>()
+            if (gps.tripActive) parts += "MAX ${Format.speed(gps.trip.maxSpeedMs, unit)}"
             if (settings.overlaySatellites) parts += "SAT ${gps.usedInFix}/${gps.satellites.size}"
             fix?.accuracyM?.let { parts += "±${it.toInt()} m" }
             if (!fresh) parts += if (fix == null) "NO FIX" else "FIX ${(now - fix.elapsedMs) / 1000} s"
-            add(parts.joinToString("  "))
+            if (parts.isNotEmpty()) add(parts.joinToString("  "))
             val clock = time.format(Date(fix?.utcMs ?: System.currentTimeMillis()))
             val alt = fix?.altitudeM?.takeIf { settings.overlayAltitude }?.let { "  ALT ${it.toInt()} m" } ?: ""
             add(clock + alt)
             val extra = buildList {
                 if (settings.overlayHeading) fix?.bearingDeg?.let { add(String.format(Locale.US, "HDG %03.0f° %s", it, Format.compassPoint(it))) }
-                if (settings.overlayDistance) add("DIST ${Format.distance(gps.trip.distanceM, unit)}")
+                if (settings.overlayDistance && gps.tripActive) add("DIST ${Format.distance(gps.trip.distanceM, unit)}")
             }
             if (extra.isNotEmpty()) add(extra.joinToString("  "))
             if (settings.overlayCoordinates && fix != null) add(Format.coordinates(fix.lat, fix.lon))
@@ -139,7 +141,7 @@ class OverlayRenderer {
 
     /** (seconds before now, speed in [unit]) for the last [CHART_WINDOW_MS] of the track. */
     private fun recentSpeeds(gps: GpsState, unit: SpeedUnit): List<Pair<Float, Float>> {
-        val track = gps.track
+        val track = gps.recent
         val end = track.lastOrNull()?.utcMs ?: return emptyList()
         val out = ArrayList<Pair<Float, Float>>()
         for (i in track.indices.reversed()) {

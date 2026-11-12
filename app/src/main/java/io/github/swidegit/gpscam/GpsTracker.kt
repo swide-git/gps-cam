@@ -59,8 +59,12 @@ data class GpsState(
     val dop: Dop? = null,
     val ttffMs: Int? = null,
     val trip: TripSnapshot = TripSnapshot(),
-    /** Points of the current trip (for the speed chart); the same points go to [TripStore]. */
+    /** Points of the current trip; the same points go to [TripStore]. Empty while no trip runs. */
     val track: List<TrackPoint> = emptyList(),
+    /** True while a trip is being recorded (started by the user, or automatically when enabled). */
+    val tripActive: Boolean = false,
+    /** The last hour of points, kept in memory only: speed chart and overlay chart without a trip. */
+    val recent: List<TrackPoint> = emptyList(),
     /** Acceleration meter state and the latest completed run (shown for a while, also in the video). */
     val meter: MeterStatus = MeterStatus.NeedStop,
     val lastRun: RunResult? = null,
@@ -93,12 +97,17 @@ data class GpsState(
 object GpsTracker {
     private const val TAG = "GpsTracker"
     private const val TRACK_MAX_ACCURACY_M = 50.0
+    private const val RECENT_MS = 60 * 60_000L
     private val _state = MutableStateFlow(GpsState())
     val state: StateFlow<GpsState> = _state
 
     private val trip = TripStats()
+    /** Speed derivation for chips without Doppler speed; fed with every fix, trip or not. */
+    private val live = TripStats()
     private var tripId: Long? = null
+    private var tripActive = false
     private val track = ArrayList<TrackPoint>()
+    private val recent = ArrayList<TrackPoint>()
     private var meterUnit: SpeedUnit? = null
     private var meter = PerformanceMeter(emptyList())
     private val recentFixes = ArrayDeque<Long>()
@@ -184,6 +193,8 @@ object GpsTracker {
     fun start(context: Context) {
         if (thread != null) return
         TripStore.init(context)
+        synchronized(trip) { if (AppSettings.state.value.autoTrip) tripActive = true }
+        _state.update { it.copy(tripActive = tripActive) }
         PerformanceStore.init(context)
         TtffStore.init(context)
         val lm = context.applicationContext.getSystemService(LocationManager::class.java)
@@ -235,16 +246,33 @@ object GpsTracker {
         _state.update { it.copy(running = false, satellites = emptyList(), fixType = FixType.NONE) }
     }
 
-    /** Saves the current trip to the history and starts a new one. */
+    /** Starts recording a trip; it is saved to the history by [endTrip]. */
+    fun startTrip() {
+        synchronized(trip) {
+            trip.reset()
+            track.clear()
+            tripId = null
+            tripActive = true
+        }
+        synchronized(quality) { quality.clear() }
+        _state.update { it.copy(tripActive = true, trip = TripSnapshot(), track = emptyList(), quality = emptyList()) }
+    }
+
+    /**
+     * Saves the current trip to the history. With automatic recording a new trip starts at once;
+     * otherwise nothing is recorded until the next [startTrip].
+     */
     fun endTrip() {
+        val auto = AppSettings.state.value.autoTrip
         synchronized(trip) {
             tripId?.let { TripStore.endTrip(it, track.toList(), trip.current) }
             trip.reset()
             track.clear()
             tripId = null
+            tripActive = auto
         }
         synchronized(quality) { quality.clear() }
-        _state.update { it.copy(trip = TripSnapshot(), track = emptyList(), quality = emptyList()) }
+        _state.update { it.copy(tripActive = auto, trip = TripSnapshot(), track = emptyList(), quality = emptyList()) }
     }
 
     /** Starts the sky signal map and the receiver gain statistics afresh. */
@@ -302,15 +330,27 @@ object GpsTracker {
             loc.hasAltitude() -> loc.altitude
             else -> null
         }
+        var recentCopy: List<TrackPoint>? = null
+        val active: Boolean
         val (speed, snapshot, points) = synchronized(trip) {
-            val speed = trip.speedOf(fix)
-            val snapshot = trip.add(fix)
-            val last = track.lastOrNull()
+            val speed = live.speedOf(fix)
+            live.add(fix)
+            if (!tripActive && AppSettings.state.value.autoTrip) tripActive = true
+            active = tripActive
+            val snapshot = if (tripActive) trip.add(fix) else TripSnapshot()
             // One point per second at most, and only usable positions.
-            val record = (accuracy ?: Double.MAX_VALUE) <= TRACK_MAX_ACCURACY_M && (last == null || elapsedMs - last.elapsedMs >= 1000)
+            val usable = (accuracy ?: Double.MAX_VALUE) <= TRACK_MAX_ACCURACY_M
+            val point = TrackPoint(loc.time, elapsedMs, loc.latitude, loc.longitude, altitude, speed, accuracy)
+            val lastRecent = recent.lastOrNull()
+            if (usable && (lastRecent == null || elapsedMs - lastRecent.elapsedMs >= 1000)) {
+                recent += point
+                while (recent.isNotEmpty() && loc.time - recent.first().utcMs > RECENT_MS) recent.removeAt(0)
+                recentCopy = recent.toList()
+            }
+            val last = track.lastOrNull()
+            val record = tripActive && usable && (last == null || elapsedMs - last.elapsedMs >= 1000)
             if (record) {
                 val id = tripId ?: loc.time.also { tripId = it }
-                val point = TrackPoint(loc.time, elapsedMs, loc.latitude, loc.longitude, altitude, speed, accuracy)
                 track += point
                 TripStore.append(id, point)
             }
@@ -344,6 +384,7 @@ object GpsTracker {
             it.copy(
                 receiver = it.receiver.copy(clockOffsetMs = offset),
                 fix = gpsFix, trip = snapshot, track = points ?: it.track, providerEnabled = true,
+                tripActive = active, recent = recentCopy ?: it.recent,
                 meter = meter.status, updateHz = hz,
                 lastRun = runs.lastOrNull() ?: it.lastRun,
                 lastRunElapsedMs = if (runs.isNotEmpty()) elapsedMs else it.lastRunElapsedMs,

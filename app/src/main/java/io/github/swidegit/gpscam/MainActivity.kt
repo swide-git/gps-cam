@@ -288,6 +288,9 @@ private fun SettingsScreen(settings: Settings, modifier: Modifier) {
             }
         }
         SettingsCard(R.string.settings_general) {
+            SettingSwitch(R.string.settings_auto_trip, R.string.settings_auto_trip_hint, settings.autoTrip) { v ->
+                AppSettings.update { it.copy(autoTrip = v) }
+            }
             SettingSwitch(R.string.settings_screen_on, null, settings.keepScreenOn) { v -> AppSettings.update { it.copy(keepScreenOn = v) } }
         }
         Spacer(Modifier.height(8.dp))

@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -93,8 +94,14 @@ fun TripsScreen(gps: GpsState, settings: Settings, modifier: Modifier) {
             val current = GpsTracker.currentTripId()
             Card {
                 Text(stringResource(R.string.trip_current), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                if (current == null || gps.track.size < 2) {
+                if (!gps.tripActive) {
+                    Text(stringResource(R.string.trip_idle), color = Palette.muted)
+                    FilledTonalButton(onClick = { GpsTracker.startTrip() }, modifier = Modifier.padding(top = 8.dp)) {
+                        Text(stringResource(R.string.start_trip))
+                    }
+                } else if (current == null || gps.track.size < 2) {
                     Text(stringResource(R.string.trip_current_empty), color = Palette.muted)
+                    TextButton(onClick = { GpsTracker.endTrip() }) { Text(stringResource(R.string.end_trip)) }
                 } else {
                     TripFacts(current, gps.track.last().utcMs, gps.trip.distanceM, gps.trip.maxSpeedMs, gps.trip.averageMovingSpeedMs, gps.track.size, unit)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {

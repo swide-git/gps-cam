@@ -27,8 +27,10 @@ speed stays accurate at any speed the receiver can track.
   quarter mile with trap speed, timed from the GPS Doppler speed with crossings interpolated
   between fixes. Last and best times on the Speed screen; the running timer and the result also
   appear in the video overlay.
-- **Trips**: "End trip" saves the trip (track and summary) in the app; tap a trip for its speed
-  and altitude charts. Any trip can be exported
+- **Trips**: recorded only after "Start trip" (or from the first fix when "Record trips
+  automatically" is on); "End trip" saves the track and summary in the app. Without a trip the
+  speed, the chart of the last hour and the video overlay still work, from memory only. Tap a
+  saved trip for its speed and altitude charts. Any trip can be exported
   as GPX or CSV to `Documents/GPSCam` and shared, e.g. to view the route in Google Earth or Strava. GPS runs only while the app is on screen: no background work, no notification.
 - **Satellites**: sky plot, per-satellite C/N0 signal bars, constellation (GPS, GLONASS, Galileo,
   BeiDou, QZSS, NavIC, SBAS), band (L1/E1/B1, L5/E5a/B2a, ...), used-in-fix, time to first fix,

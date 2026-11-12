@@ -124,14 +124,18 @@ private fun LandscapeSpeed(gps: GpsState, settings: Settings, modifier: Modifier
             Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
         ) {
-            TileRow(
-                Tile(stringResource(R.string.stat_max), "${Format.speed(trip.maxSpeedMs, unit)} ${unit.label}"),
-                Tile(stringResource(R.string.stat_avg), "${Format.speed(trip.averageMovingSpeedMs, unit)} ${unit.label}"),
-            )
-            TileRow(
-                Tile(stringResource(R.string.stat_distance), Format.distance(trip.distanceM, unit)),
-                Tile(stringResource(R.string.stat_moving_time), Format.duration(trip.movingTimeMs)),
-            )
+            if (gps.tripActive) {
+                TileRow(
+                    Tile(stringResource(R.string.stat_max), "${Format.speed(trip.maxSpeedMs, unit)} ${unit.label}"),
+                    Tile(stringResource(R.string.stat_avg), "${Format.speed(trip.averageMovingSpeedMs, unit)} ${unit.label}"),
+                )
+                TileRow(
+                    Tile(stringResource(R.string.stat_distance), Format.distance(trip.distanceM, unit)),
+                    Tile(stringResource(R.string.stat_moving_time), Format.duration(trip.movingTimeMs)),
+                )
+            } else {
+                StartTripCard()
+            }
             TileRow(
                 Tile(stringResource(R.string.stat_altitude), fix?.altitudeM?.let { "${it.toInt()} m" } ?: "--"),
                 Tile(stringResource(R.string.stat_heading), fix?.bearingDeg?.let { String.format(Locale.US, "%.0f° %s", it, Format.compassPoint(it)) } ?: "--"),
@@ -194,22 +198,27 @@ private fun PortraitSpeed(gps: GpsState, settings: Settings, modifier: Modifier)
             }
         }
 
-        TileRow(
-            Tile(stringResource(R.string.stat_max), "${Format.speed(trip.maxSpeedMs, unit)} ${unit.label}"),
-            Tile(stringResource(R.string.stat_avg), "${Format.speed(trip.averageMovingSpeedMs, unit)} ${unit.label}"),
-        )
-        TileRow(
-            Tile(stringResource(R.string.stat_distance), Format.distance(trip.distanceM, unit)),
-            Tile(stringResource(R.string.stat_moving_time), Format.duration(trip.movingTimeMs)),
-        )
-        SpeedChart(gps.track, unit, Modifier.fillMaxWidth())
+        if (gps.tripActive) {
+            TileRow(
+                Tile(stringResource(R.string.stat_max), "${Format.speed(trip.maxSpeedMs, unit)} ${unit.label}"),
+                Tile(stringResource(R.string.stat_avg), "${Format.speed(trip.averageMovingSpeedMs, unit)} ${unit.label}"),
+            )
+            TileRow(
+                Tile(stringResource(R.string.stat_distance), Format.distance(trip.distanceM, unit)),
+                Tile(stringResource(R.string.stat_moving_time), Format.duration(trip.movingTimeMs)),
+            )
+        } else {
+            StartTripCard()
+        }
+        // The trip when one runs (it can be longer than the last hour), the last hour otherwise.
+        SpeedChart(if (gps.tripActive && gps.track.size >= 2) gps.track else gps.recent, unit, Modifier.fillMaxWidth())
         AccelerationCard(gps, unit, Modifier.fillMaxWidth())
         TileRow(
             Tile(stringResource(R.string.stat_altitude), fix?.altitudeM?.let { "${it.toInt()} m" } ?: "--"),
             Tile(stringResource(R.string.stat_heading), fix?.bearingDeg?.let { String.format(Locale.US, "%.0f° %s", it, Format.compassPoint(it)) } ?: "--"),
         )
         TileRow(
-            Tile(stringResource(R.string.stat_trip_time), Format.duration(trip.elapsedMs)),
+            Tile(stringResource(R.string.stat_trip_time), if (gps.tripActive) Format.duration(trip.elapsedMs) else "--"),
             Tile(stringResource(R.string.stat_ttff), gps.ttffMs?.let { String.format(Locale.US, "%.1f s", it / 1000.0) } ?: "--"),
         )
         if (fix != null) {
@@ -220,15 +229,31 @@ private fun PortraitSpeed(gps: GpsState, settings: Settings, modifier: Modifier)
                 Text(Format.coordinates(fix.lat, fix.lon), style = MaterialTheme.typography.titleMedium)
             }
         }
-        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            FilledTonalButton(onClick = { GpsTracker.endTrip() }) {
-                Icon(Icons.Filled.Refresh, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.end_trip))
+        if (gps.tripActive) {
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                FilledTonalButton(onClick = { GpsTracker.endTrip() }) {
+                    Icon(Icons.Filled.Refresh, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.end_trip))
+                }
+                Text(stringResource(R.string.end_trip_hint), style = MaterialTheme.typography.bodySmall, color = Palette.muted, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
             }
-            Text(stringResource(R.string.end_trip_hint), style = MaterialTheme.typography.bodySmall, color = Palette.muted, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
         }
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+/** Shown instead of the trip tiles while no trip is recorded. */
+@Composable
+fun StartTripCard(modifier: Modifier = Modifier) {
+    Column(
+        modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(24.dp)).padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(stringResource(R.string.trip_idle), color = MaterialTheme.colorScheme.onSecondaryContainer, textAlign = TextAlign.Center)
+        FilledTonalButton(onClick = { GpsTracker.startTrip() }, modifier = Modifier.padding(top = 10.dp)) {
+            Text(stringResource(R.string.start_trip))
+        }
     }
 }
 
