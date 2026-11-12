@@ -53,7 +53,7 @@ speed stays accurate at any speed the receiver can track.
   corner, size and background opacity are configurable. Controls sit beside or below the preview,
   never on it. Photos (up to 4K, 16:9) get the same box and go to `Pictures/GPSCam`. Volume up
   starts or stops recording, volume down takes a photo.
-- **Landscape**: a low bottom menu with icons and labels side by side; the Speed screen shows the big number beside
+- **Landscape**: the menu stays on the edge where it was in portrait, as a rail with labels under the icons; the Speed screen shows the big number beside
   the tiles, and the camera puts its controls on the side. Videos go to
   `Movies/GPSCam`; a per-second telemetry subtitle file (`.srt`) goes to `Documents/GPSCam`.
 

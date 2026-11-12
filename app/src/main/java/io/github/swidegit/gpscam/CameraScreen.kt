@@ -91,9 +91,7 @@ fun CameraScreen(modifier: Modifier, onOpenSettings: () -> Unit) {
     LaunchedEffect(settings.landscapeFocus) { session.applyFocus(settings.landscapeFocus) }
 
     // The activity is not recreated on rotation: hand the new display rotation to the camera.
-    val view = LocalView.current
-    val configuration = LocalConfiguration.current
-    val rotation = remember(configuration) { view.display?.rotation ?: Surface.ROTATION_0 }
+    val rotation = rememberDisplayRotation()
     LaunchedEffect(rotation) { session.setRotation(rotation) }
 
     fun toggleRecording() {
@@ -200,8 +198,10 @@ fun CameraScreen(modifier: Modifier, onOpenSettings: () -> Unit) {
             }
         }
         if (landscape) {
+            // The control panel sits on the same edge as the menu (the portrait bottom edge).
+            val panelAtEnd = rotation != Surface.ROTATION_270
             Row(Modifier.fillMaxSize()) {
-                preview(Modifier.weight(1f).fillMaxHeight())
+                if (panelAtEnd) preview(Modifier.weight(1f).fillMaxHeight())
                 Column(
                     Modifier.width(132.dp).fillMaxHeight().padding(vertical = 8.dp, horizontal = 6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -216,6 +216,7 @@ fun CameraScreen(modifier: Modifier, onOpenSettings: () -> Unit) {
                         }
                     }
                 }
+                if (!panelAtEnd) preview(Modifier.weight(1f).fillMaxHeight())
             }
         } else {
             Column(Modifier.fillMaxSize()) {
