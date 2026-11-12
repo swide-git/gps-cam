@@ -24,7 +24,19 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -42,8 +54,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -169,39 +179,23 @@ private fun App(hasLocation: Boolean, requestLocation: () -> Unit) {
             }
         },
         bottomBar = {
-            if (!landscape) NavigationBar {
-                Tab.entries.forEach { t ->
-                    NavigationBarItem(
-                        selected = tab == t,
-                        onClick = { tab = t },
-                        icon = { Icon(t.icon, contentDescription = null) },
-                        label = { Text(stringResource(t.label)) },
-                    )
-                }
-            }
-        },
-    ) { padding ->
-        Row(Modifier.padding(padding).fillMaxSize()) {
             if (landscape) {
-                NavigationRail(
-                    header = {
-                        IconButton(onClick = { showSettings = true }) {
-                            Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings))
-                        }
-                    },
-                ) {
-                    Spacer(Modifier.weight(1f))
+                CompactNavigationBar(tab, onSelect = { tab = it }, onSettings = { showSettings = true })
+            } else {
+                NavigationBar {
                     Tab.entries.forEach { t ->
-                        NavigationRailItem(
+                        NavigationBarItem(
                             selected = tab == t,
                             onClick = { tab = t },
                             icon = { Icon(t.icon, contentDescription = null) },
                             label = { Text(stringResource(t.label)) },
                         )
                     }
-                    Spacer(Modifier.weight(1f))
                 }
             }
+        },
+    ) { padding ->
+        Row(Modifier.padding(padding).fillMaxSize()) {
             val modifier = Modifier.weight(1f).fillMaxHeight()
             when {
                 !hasLocation -> LocationPermissionScreen(modifier, requestLocation)
@@ -210,6 +204,42 @@ private fun App(hasLocation: Boolean, requestLocation: () -> Unit) {
                 tab == Tab.CAMERA -> CameraScreen(modifier, onOpenSettings = { showSettings = true })
                 tab == Tab.TRIPS -> TripsScreen(gps, settings, modifier)
             }
+        }
+    }
+}
+
+/**
+ * Landscape: the same bottom menu as in portrait, but low, with icon and label side by side, so
+ * the content keeps most of the height. Settings sits at the end, as there is no top bar here.
+ */
+@Composable
+private fun CompactNavigationBar(tab: Tab, onSelect: (Tab) -> Unit, onSettings: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+            .height(52.dp)
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceEvenly,
+    ) {
+        Tab.entries.forEach { t ->
+            val selected = tab == t
+            Row(
+                Modifier.clip(RoundedCornerShape(20.dp))
+                    .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                    .clickable { onSelect(t) }
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                Icon(t.icon, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(t.label), color = color, style = MaterialTheme.typography.labelLarge, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+            }
+        }
+        IconButton(onClick = onSettings) {
+            Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
