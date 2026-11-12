@@ -137,7 +137,7 @@ private fun LandscapeSpeed(gps: GpsState, settings: Settings, modifier: Modifier
                 StartTripCard()
             }
             TileRow(
-                Tile(stringResource(R.string.stat_altitude), fix?.altitudeM?.let { "${it.toInt()} m" } ?: "--"),
+                Tile(stringResource(R.string.stat_altitude), fix?.altitudeM?.let { Format.altitude(it, unit) } ?: "--"),
                 Tile(stringResource(R.string.stat_heading), fix?.bearingDeg?.let { String.format(Locale.US, "%.0f° %s", it, Format.compassPoint(it)) } ?: "--"),
             )
         }
@@ -214,7 +214,7 @@ private fun PortraitSpeed(gps: GpsState, settings: Settings, modifier: Modifier)
         SpeedChart(if (gps.tripActive && gps.track.size >= 2) gps.track else gps.recent, unit, Modifier.fillMaxWidth())
         AccelerationCard(gps, unit, Modifier.fillMaxWidth())
         TileRow(
-            Tile(stringResource(R.string.stat_altitude), fix?.altitudeM?.let { "${it.toInt()} m" } ?: "--"),
+            Tile(stringResource(R.string.stat_altitude), fix?.altitudeM?.let { Format.altitude(it, unit) } ?: "--"),
             Tile(stringResource(R.string.stat_heading), fix?.bearingDeg?.let { String.format(Locale.US, "%.0f° %s", it, Format.compassPoint(it)) } ?: "--"),
         )
         TileRow(

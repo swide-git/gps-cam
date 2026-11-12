@@ -38,6 +38,15 @@ object PerformanceStore {
         save()
     }
 
+    /** Removes one result (the first equal one: same run, time and moment). */
+    @Synchronized
+    fun delete(result: RunResult) {
+        val i = _results.value.indexOf(result)
+        if (i < 0) return
+        _results.value = _results.value.toMutableList().apply { removeAt(i) }
+        save()
+    }
+
     @Synchronized
     fun clear() {
         _results.value = emptyList()

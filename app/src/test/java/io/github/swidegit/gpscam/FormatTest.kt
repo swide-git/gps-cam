@@ -47,3 +47,12 @@ class ChartAxisTest {
         org.junit.Assert.assertEquals(350.0, niceAxisMax(320.0), 0.0)
     }
 }
+
+class AltitudeTest {
+    @Test fun feetWithMphAndKnots() {
+        org.junit.Assert.assertEquals("1000 m", Format.altitude(1000.0, SpeedUnit.KMH))
+        org.junit.Assert.assertEquals("1000 m", Format.altitude(1000.0, SpeedUnit.MS))
+        org.junit.Assert.assertEquals("3281 ft", Format.altitude(1000.0, SpeedUnit.MPH))
+        org.junit.Assert.assertEquals("3281 ft", Format.altitude(1000.0, SpeedUnit.KNOTS))
+    }
+}

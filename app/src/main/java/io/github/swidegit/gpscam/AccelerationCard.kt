@@ -7,7 +7,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -23,6 +28,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import java.text.DateFormat
+import java.util.Date
 import java.util.Locale
 
 fun formatRunTime(ms: Long): String = String.format(Locale.US, "%.2f s", ms / 1000.0)
@@ -32,6 +39,8 @@ fun formatRunTime(ms: Long): String = String.format(Locale.US, "%.2f s", ms / 10
 fun AccelerationCard(gps: GpsState, unit: SpeedUnit, modifier: Modifier = Modifier) {
     val results by PerformanceStore.results.collectAsStateWithLifecycle()
     var confirmClear by remember { mutableStateOf(false) }
+    var showHistory by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf<RunResult?>(null) }
     Column(
         modifier.background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(24.dp)).padding(20.dp),
     ) {
@@ -68,10 +77,43 @@ fun AccelerationCard(gps: GpsState, unit: SpeedUnit, modifier: Modifier = Modifi
             Text(stringResource(R.string.accel_low_rate), style = MaterialTheme.typography.bodySmall, color = Palette.muted, modifier = Modifier.padding(top = 6.dp))
         }
         if (results.isNotEmpty()) {
-            TextButton(onClick = { confirmClear = true }, modifier = Modifier.align(Alignment.End)) {
-                Text(stringResource(R.string.accel_clear))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { showHistory = !showHistory }) {
+                    Text(stringResource(if (showHistory) R.string.accel_history_hide else R.string.accel_history_show, results.size))
+                }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = { confirmClear = true }) { Text(stringResource(R.string.accel_clear)) }
+            }
+            if (showHistory) {
+                val format = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+                results.forEach { r ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(r.label, fontWeight = FontWeight.Medium)
+                            Text(format.format(Date(r.utcMs)), style = MaterialTheme.typography.bodySmall, color = Palette.muted)
+                        }
+                        Text(
+                            formatRunTime(r.timeMs) + (r.trapSpeedMs?.let { "\n@ ${Format.speed(it, unit)} ${unit.label}" } ?: ""),
+                            fontFamily = FontFamily.Monospace,
+                        )
+                        IconButton(onClick = { confirmDelete = r }) {
+                            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.delete), tint = Palette.muted)
+                        }
+                    }
+                }
             }
         }
+    }
+    confirmDelete?.let { r ->
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            title = { Text(stringResource(R.string.accel_delete_title)) },
+            text = { Text("${r.label}  ${formatRunTime(r.timeMs)}") },
+            confirmButton = {
+                TextButton(onClick = { PerformanceStore.delete(r); confirmDelete = null }) { Text(stringResource(R.string.delete), color = Palette.bad) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text(stringResource(R.string.cancel)) } },
+        )
     }
     if (confirmClear) {
         AlertDialog(

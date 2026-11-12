@@ -114,6 +114,9 @@
     <string name="accel_best">Best</string>
     <string name="accel_low_rate">This phone reports GPS once per second; times are interpolated between fixes, accurate to about a tenth of a second.</string>
     <string name="accel_clear">Clear times</string>
+    <string name="accel_history_show">Show all (%1$d)</string>
+    <string name="accel_history_hide">Hide list (%1$d)</string>
+    <string name="accel_delete_title">Delete this time?</string>
     <string name="accel_clear_title">Clear all acceleration times?</string>
     <string name="sats_used">In fix</string>
     <string name="sats_visible">Visible</string>

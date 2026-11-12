@@ -49,6 +49,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
+import kotlin.math.roundToInt
 
 data class Exported(val uri: Uri, val format: ExportFormat)
 
@@ -197,7 +198,8 @@ private fun TripDetail(
             DetailTiles(
                 stringResource(R.string.stat_moving_time) to Format.duration(trip.movingTimeMs),
                 stringResource(R.string.trip_altitude_range) to
-                    if (altitudes.isEmpty()) "--" else "${altitudes.min().toInt()}–${altitudes.max().toInt()} m",
+                    if (altitudes.isEmpty()) "--" else
+                        "${unit.altitudeFromMetres(altitudes.min()).roundToInt()}–${Format.altitude(altitudes.max(), unit)}",
             )
             val accuracies = track.mapNotNull { it.accuracyM }
             DetailTiles(
@@ -207,7 +209,7 @@ private fun TripDetail(
             )
             SpeedChart(track, unit, Modifier.fillMaxWidth(), showRanges = false)
             if (altitudes.size >= 2) {
-                TrackChart(stringResource(R.string.stat_altitude), track, "m", { it.altitudeM }, fromZero = false, showRanges = false, modifier = Modifier.fillMaxWidth())
+                TrackChart(stringResource(R.string.stat_altitude), track, unit.altitudeLabel, { p -> p.altitudeM?.let { unit.altitudeFromMetres(it) } }, fromZero = false, showRanges = false, modifier = Modifier.fillMaxWidth())
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

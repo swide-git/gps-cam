@@ -15,6 +15,11 @@ enum class SpeedUnit(val label: String, private val perMetrePerSecond: Double, v
     fun fromMetresPerSecond(ms: Double): Double = ms * perMetrePerSecond
     fun distanceFromMetres(m: Double): Double = m * perMetre
     fun next(): SpeedUnit = entries[(ordinal + 1) % entries.size]
+
+    /** Feet go with mph and knots (road and aviation use), metres with km/h and m/s. */
+    val altitudeInFeet: Boolean get() = this == MPH || this == KNOTS
+    val altitudeLabel: String get() = if (altitudeInFeet) "ft" else "m"
+    fun altitudeFromMetres(m: Double): Double = if (altitudeInFeet) m / 0.3048 else m
 }
 
 object Format {
@@ -30,6 +35,8 @@ object Format {
     }
 
     /** 0:05, 12:34, 1:02:03. */
+    fun altitude(m: Double, unit: SpeedUnit): String = "${unit.altitudeFromMetres(m).roundToLong()} ${unit.altitudeLabel}"
+
     fun duration(ms: Long): String {
         val total = (ms.coerceAtLeast(0) / 1000.0).roundToLong()
         val h = total / 3600

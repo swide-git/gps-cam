@@ -85,7 +85,7 @@ class OverlayRenderer {
             if (!fresh) parts += if (fix == null) "NO FIX" else "FIX ${(now - fix.elapsedMs) / 1000} s"
             if (parts.isNotEmpty()) add(parts.joinToString("  "))
             val clock = time.format(Date(fix?.utcMs ?: System.currentTimeMillis()))
-            val alt = fix?.altitudeM?.takeIf { settings.overlayAltitude }?.let { "  ALT ${it.toInt()} m" } ?: ""
+            val alt = fix?.altitudeM?.takeIf { settings.overlayAltitude }?.let { "  ALT ${Format.altitude(it, unit)}" } ?: ""
             add(clock + alt)
             val extra = buildList {
                 if (settings.overlayHeading) fix?.bearingDeg?.let { add(String.format(Locale.US, "HDG %03.0f° %s", it, Format.compassPoint(it))) }
